@@ -122,18 +122,23 @@ a:hover { text-decoration: none; }
 .topbar-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
 .brand { display: flex; flex-direction: column; text-decoration: none; color: inherit; gap: 2px; }
 .brand-sub { color: var(--muted); font-size: .78rem; font-weight: 700; }
-.top-actions { display: flex; gap: .4rem; }
+.top-actions { display: flex; gap: .4rem; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 640px) {
+  .top-actions .btn span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+  .top-actions .btn { min-width: 44px; padding: .4rem .55rem; }
+}
 .top-actions .btn { min-height: 40px; padding: .35rem .7rem; }
 .buscador { position: relative; display: flex; align-items: center; margin-top: 8px; }
 .buscador-ico { position: absolute; left: 12px; color: var(--blue); display: grid; }
 .buscador input {
   width: 100%; min-height: 52px; border-radius: 14px; border: 1px solid var(--line);
-  background: var(--white); padding: .7rem 48px; font-size: 16px; color: var(--navy);
+  background: var(--white); padding: .7rem 96px .7rem 48px; font-size: 16px; color: var(--navy);
 }
 .buscador input::-webkit-search-cancel-button,
 .buscador input::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }
 .buscador input:focus { border-color: var(--blue); }
 .buscador .btn-icon { position: absolute; right: 4px; }
+.buscador .btn-scan { right: 48px; }
 .buscador-sec { margin: .4rem 0 1rem; }
 .tabbar {
   display: flex; gap: 4px; margin-top: 8px;
@@ -458,6 +463,90 @@ body.lb-open { overflow: hidden; }
 
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto !important; transition: none !important; }
+}
+
+.panel-h { display: flex; justify-content: space-between; align-items: center; gap: .6rem; }
+.panel-h h2 { margin: 0; }
+.btn-star.is-on { background: var(--ice); color: var(--navy); border: 2px solid var(--blue); }
+.badge-nueva { background: var(--orange); color: var(--navy); }
+.medida { display: flex; flex-wrap: wrap; gap: .35rem .6rem; align-items: center; margin-top: .55rem; }
+.medida label { font-size: .8rem; font-weight: 700; color: var(--muted); }
+.medida-in { min-height: 44px; border: 1px solid var(--line); border-radius: 10px; padding: .4rem .6rem; width: min(100%, 160px); font-size: 16px; }
+.medida-juicio { margin: 0; font-weight: 700; flex: 1 1 12rem; }
+.medida-juicio.es-ok { color: var(--blue); }
+.medida-juicio.es-fuera, .medida-juicio.es-incoherente { color: var(--navy); background: var(--warn-bg); border-left: 4px solid var(--orange); padding: .25rem .5rem; border-radius: 8px; }
+.medida-juicio.es-no-numerico, .medida-juicio.es-sin-rango { color: var(--navy); }
+.scan, .share {
+  position: fixed; inset: 0; z-index: 90; background: #071A40; color: var(--white);
+  display: flex; flex-direction: column; padding: 12px 12px 20px;
+}
+.share { background: rgba(7, 26, 64, .72); align-items: center; justify-content: center; }
+.share > * , .share h2, .share p, .share .acciones { background: var(--white); color: var(--navy); }
+.share { }
+.share-caja, .share h2, .share p, .share .acciones { }
+.scan-bar, .share h2, .share p, .share .acciones { max-width: 520px; }
+.scan-bar { display: flex; justify-content: space-between; gap: .6rem; align-items: center; }
+.scan-video { width: 100%; flex: 1; min-height: 0; object-fit: cover; background: #000; border-radius: 16px; margin-top: 10px; }
+.scan-estado { min-height: 1.4em; font-weight: 700; }
+.share { padding: 16px; }
+.share h2, .share p, .share .acciones {
+  width: min(520px, 100%);
+  margin: 0;
+  padding: .8rem 1rem;
+}
+.share h2 { border-radius: 18px 18px 0 0; }
+.share p { padding-top: 0; }
+.share .acciones { border-radius: 0 0 18px 18px; display: flex; flex-wrap: wrap; gap: 8px; }
+.novedades { list-style: none; margin: 0; padding: 0; }
+.novedades > li { border-top: 1px solid var(--line); padding: .7rem 0; }
+.novedades a { color: var(--navy); text-decoration: none; font-weight: 700; }
+.cambios { list-style: none; margin: .4rem 0 0; padding: 0; display: grid; gap: 6px; }
+.cambios li { display: grid; grid-template-columns: minmax(90px, 1.2fr) 1fr 1fr; gap: 6px; background: var(--ice-soft); border-radius: 10px; padding: .4rem .5rem; }
+.cambios .antes { color: var(--navy); }
+.cambios .despues { color: var(--blue); font-weight: 700; }
+.solo-impresion { display: none; }
+
+html.planta { font-size: 20px; }
+html.planta .btn,
+html.planta .chip,
+html.planta .tabbar a,
+html.planta .code-btn,
+html.planta .marca,
+html.planta .bar-row,
+html.planta input,
+html.planta .btn-icon,
+html.planta .stat {
+  min-height: 56px;
+}
+html.planta .nota,
+html.planta .pcard p,
+html.planta .kv dt,
+html.planta .hero-meta,
+html.planta .medida label { color: var(--navy); }
+html.planta .pcard,
+html.planta .panel,
+html.planta .sec,
+html.planta .gauge,
+html.planta .stat { border: 2px solid var(--navy); }
+html.planta .banner-inc,
+html.planta .medida-juicio.es-fuera { border-width: 3px; }
+
+@media print {
+  @page { size: A4; margin: 10mm; }
+  body { background: white !important; }
+  .topbar, .tabbar, .dock, .no-print, .pie, #toast, .acciones, .pantalla, .scan, .share { display: none !important; }
+  .shell { max-width: none; padding: 0; }
+  .solo-impresion { display: block !important; color: #071A40; font-size: 9.5pt; }
+  .imp-cab { display: flex; justify-content: space-between; border-bottom: 3px solid #071A40; margin-bottom: 6px; }
+  .solo-impresion h1 { font-size: 14pt; margin: 4px 0; }
+  .imp-nombre { font-weight: 700; margin: 0 0 4px; }
+  .imp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
+  .solo-impresion table { width: 100%; border-collapse: collapse; }
+  .solo-impresion caption { text-align: left; font-weight: 700; color: #083DC4; }
+  .solo-impresion th, .solo-impresion td { border-bottom: 1px solid #E0E0E0; text-align: left; vertical-align: top; padding: 1px 4px; }
+  .imp-fig { margin: 6px 0 0; }
+  .imp-fig img { max-height: 42mm; width: auto; object-fit: contain; }
+  .imp-obs, .imp-pie { margin: 4px 0 0; }
 }
 
 @media print {

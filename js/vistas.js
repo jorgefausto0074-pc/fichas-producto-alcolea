@@ -2,6 +2,7 @@ import {
   esc, icono, etiquetaGrupo, esCodigoG, tieneDatos, parseNum, enteroPlano, boolTexto,
   CABECERA, ENVASE, PALET_CAMPOS, TABLAS, DISENO_GRUPOS, TIPO_INC, fechaPaquete,
 } from './util.js';
+import { rangoIncoherente } from './analisis.js';
 
 function seccion(titulo, ico, cuerpo, { open = false, extra = '', cuenta = '' } = {}) {
   return `<details class="sec"${open ? ' open' : ''}>
@@ -63,7 +64,18 @@ function ariaFila(fila) {
   return partes.filter(Boolean).join(', ');
 }
 
-function renderFila(fila, path, incs, vacios) {
+function htmlMedida(fila, path, avisos) {
+  const id = `med-${path.replace(/[^a-z0-9]+/gi, '-')}`;
+  const incoherente = rangoIncoherente(fila, avisos);
+  const dato = (nombre, valor) => (valor == null || valor === '' ? '' : ` data-${nombre}="${esc(valor)}"`);
+  return `<div class="medida">
+    <label for="${id}">Valor medido</label>
+    <input id="${id}" class="medida-in" type="text" inputmode="decimal" autocomplete="off" enterkeyhint="done"${dato('std', fila.std)}${dato('min', fila.min)}${dato('max', fila.max)} data-etiqueta="${esc(fila.etiqueta || '')}" data-incoherente="${incoherente ? '1' : '0'}">
+    <p class="medida-juicio" aria-live="polite"></p>
+  </div>`;
+}
+
+function renderFila(fila, path, incs, vacios, medible = false) {
   const avisos = incsDe(incs, path);
   const datos = tieneDatos(fila);
   if (!datos && !vacios) return '';
@@ -107,13 +119,15 @@ function renderFila(fila, path, incs, vacios) {
     ${fila.valor != null ? `<p class="valor-extra">${esc(fila.valor)}</p>` : ''}
     ${invertido ? '<p class="inc-line">En el PDF el máximo es menor que el mínimo. No se ha reordenado.</p>' : barra(fila)}
     ${notas}
+    ${medible ? htmlMedida(fila, path, avisos) : ''}
   </div>`;
 }
 
 function htmlTabla(p, tabla, vacios) {
   const obj = p[tabla.id] || {};
+  const medible = tabla.id === 'datos_jarabe' || tabla.id === 'producto_terminado' || tabla.id === 'proceso';
   const filas = Object.entries(obj)
-    .map(([k, fila]) => renderFila(fila, `${tabla.id}.${k}`, p.incidencias, vacios))
+    .map(([k, fila]) => renderFila(fila, `${tabla.id}.${k}`, p.incidencias, vacios, medible))
     .filter(Boolean);
   const n = Object.values(obj).filter(tieneDatos).length;
   const nota = tabla.nota ? `<p class="nota">${esc(tabla.nota)}</p>` : '';
@@ -160,7 +174,7 @@ function filaChips(titulo, clave, opciones, actual) {
   return `<div class="chip-row"><span class="chip-label" id="lab-${esc(clave)}">${esc(titulo)}</span><div class="chip-scroller" role="group" aria-labelledby="lab-${esc(clave)}">${chips.join('')}</div></div>`;
 }
 
-export function htmlLogin({ error = '', ocupado = false, fecha = '' }) {
+export function htmlLogin({ error = '', ocupado = false, fecha = '', destino = '' }) {
   return `<div class="login">
     <div class="orb orb-a" aria-hidden="true"></div>
     <div class="orb orb-b" aria-hidden="true"></div>
@@ -175,6 +189,7 @@ export function htmlLogin({ error = '', ocupado = false, fecha = '' }) {
       <h1>Fichas de producto terminado</h1>
       <p class="lead">Especificaciones de asépticos y carbonatados. Los datos se descifran en este dispositivo cuando escribes la contraseña.</p>
       ${fecha ? `<p class="fecha-datos">Datos del ${esc(fecha)}</p>` : ''}
+      ${destino ? `<p class="fecha-datos">Al entrar se abrirá la ficha SAP ${esc(destino)}.</p>` : ''}
       <form id="login-form">
         <label for="clave">Contraseña</label>
         <input id="clave" name="clave" type="password" autocomplete="current-password" required ${ocupado ? 'disabled' : ''} autofocus>
@@ -199,22 +214,25 @@ export function htmlShell({ fecha }) {
           <span class="brand-sub">Fichas · Alcolea</span>
         </a>
         <div class="top-actions">
+          <button type="button" id="btn-planta" class="btn btn-ghost" data-act="planta" aria-pressed="false" aria-label="Modo planta">${icono('spark')} <span>Planta</span></button>
           <button type="button" id="btn-instalar" class="btn btn-ghost" hidden data-act="instalar">${icono('install')} Instalar</button>
           <button type="button" id="btn-actualizar" class="btn btn-ghost" hidden data-act="actualizar">Actualizar</button>
-          <button type="button" class="btn btn-ghost" data-act="salir">${icono('logout')} Salir</button>
+          <button type="button" class="btn btn-ghost" data-act="salir" aria-label="Salir">${icono('logout')} <span>Salir</span></button>
         </div>
       </div>
       <form class="buscador" id="form-buscar" role="search">
         <label class="sr" for="q">Buscar por SAP, código G, denominación, marca o EAN</label>
         <span class="buscador-ico" aria-hidden="true">${icono('search')}</span>
         <input id="q" type="search" enterkeyhint="search" autocomplete="off" spellcheck="false" placeholder="SAP, código G, denominación, marca o EAN" aria-describedby="atajo-q">
+        <button type="button" class="btn-icon btn-scan" data-act="escanear" aria-label="Escanear código de barras">${icono('camera')}</button>
         <button type="button" class="btn-icon" data-act="limpiar-q" aria-label="Borrar búsqueda">${icono('close')}</button>
       </form>
       <p id="atajo-q" class="sr">Atajo de teclado: barra /</p>
       <nav class="tabbar" aria-label="Secciones">
         <a data-go="inicio" href="./">${icono('home')}<span>Inicio</span></a>
         <a data-go="buscar" href="?vista=buscar">${icono('search')}<span>Buscar</span></a>
-        <a data-go="codigos" href="?vista=codigos-g">${icono('layers')}<span>Códigos G</span></a>
+        <a data-go="novedades" href="?vista=novedades">${icono('spark')}<span>Novedades</span></a>
+        <a data-go="codigos" href="?vista=codigos-g">${icono('layers')}<span>Códigos</span></a>
         <a data-go="comparar" href="?vista=comparar">${icono('compare')}<span>Comparar</span></a>
       </nav>
     </header>
@@ -238,7 +256,12 @@ function notaCodigosG(stats) {
   return `${stats.codigosG} códigos G: SAP Mezcla con forma G y dígitos, de ${stats.mezclas} valores distintos. No cuentan como código G: ${otros}.${combinado ? ' El valor con barra se conserva entero y no se divide en dos códigos.' : ''} ${stats.compartidosG} de esos ${stats.codigosG} los comparten varias fichas (${stats.compartidosMezcla} si se cuentan los ${stats.mezclas} valores de mezcla).`;
 }
 
-export function htmlInicio({ fechaHumana, bruto, stats, formatos, familias, marcas, recientes, fuentes }) {
+function listaCodigosGuardados(productosLista, vacio) {
+  if (!productosLista.length) return `<p class="vacio">${vacio}</p>`;
+  return `<ul class="recientes">${productosLista.map((p) => `<li><a href="?sap=${encodeURIComponent(p.codigo_sap)}"><span class="badge">SAP ${esc(p.codigo_sap)}</span><strong>${esc(p.producto)}</strong></a></li>`).join('')}</ul>`;
+}
+
+export function htmlInicio({ fechaHumana, bruto, stats, formatos, familias, marcas, recientes, favoritos = [], abiertas = [], fuentes }) {
   const maxF = Math.max(...formatos.map(([, n]) => n), 1);
   const maxFam = Math.max(...familias.map(([, n]) => n), 1);
   const barras = (items, max, clave) => items.map(([valor, n]) => `
@@ -275,6 +298,14 @@ export function htmlInicio({ fechaHumana, bruto, stats, formatos, familias, marc
     <section class="panel">
       <h2>Por marca</h2>
       <div class="marca-grid">${marcas.map((m) => `<button type="button" class="marca" data-act="filtro" data-k="marca" data-v="${esc(m.clave)}">${esc(m.etiqueta)} <b>${m.total}</b></button>`).join('')}</div>
+    </section>
+    <section class="panel">
+      <div class="panel-h"><h2>Favoritas</h2><button type="button" class="btn btn-ghost" data-act="limpiar-fav">Vaciar</button></div>
+      ${listaCodigosGuardados(favoritos, 'Todavía no hay favoritas. La estrella de una ficha la guarda en este dispositivo.')}
+    </section>
+    <section class="panel">
+      <div class="panel-h"><h2>Abiertas recientemente</h2><button type="button" class="btn btn-ghost" data-act="limpiar-recientes">Vaciar</button></div>
+      ${listaCodigosGuardados(abiertas, 'Las últimas fichas que abras aparecerán aquí.')}
     </section>
     <section class="panel">
       <h2>Fichas con fecha más reciente</h2>
@@ -385,7 +416,48 @@ function htmlHermanos(p, hermanos) {
   return seccion('Productos con el mismo código de mezcla', 'layers', lista, { open: true, cuenta: String(otros.length) });
 }
 
-export function htmlProducto({ p, hermanos, galeria, vacios, enComparar }) {
+function filasImpresion(tabla) {
+  return Object.values(tabla || {}).filter(tieneDatos).map((fila) => {
+    const partes = [];
+    if (fila.std != null) partes.push(`Std ${fila.std}`);
+    if (fila.min != null) partes.push(`Mín ${fila.min}`);
+    if (fila.max != null) partes.push(`Máx ${fila.max}`);
+    if (fila.valor != null) partes.push(String(fila.valor));
+    if (fila.unidad) partes.push(String(fila.unidad));
+    return `<tr><th>${esc(fila.etiqueta || '')}</th><td>${esc(partes.join(' · '))}</td></tr>`;
+  }).join('');
+}
+
+function htmlImpresion(p, galeria) {
+  const etiqueta = (galeria || []).find((g) => g.casilla === 'etiqueta') || (galeria || [])[0];
+  return `<section class="solo-impresion">
+    <header class="imp-cab">
+      <p class="wordmark sm">refresc<span>o</span></p>
+      <p>Ficha de producto terminado · Planta Alcolea</p>
+    </header>
+    <h1>SAP ${esc(p.codigo_sap)} · ${esc(p.sap_mezcla || '')}</h1>
+    <p class="imp-nombre">${esc(p.producto)}</p>
+    <p>${esc(p.marca || '')} · ${esc(p.formato || '')} · ${esc(etiquetaGrupo(p.grupo_pdf))} · ${esc(p.familia_derivada || '')}</p>
+    <p>Fecha ${esc(p.fecha)} · Edición ${esc(p.edicion)} · Consumo preferente ${esc(p.consumo_preferente)} · Relación jarabe ${esc(p.relacion_jarabe || '—')}</p>
+    <div class="imp-grid">
+      <table><caption>Jarabe</caption><tbody>${filasImpresion(p.datos_jarabe) || '<tr><td>Sin valores</td></tr>'}</tbody></table>
+      <table><caption>Producto terminado</caption><tbody>${filasImpresion(p.producto_terminado) || '<tr><td>Sin valores</td></tr>'}</tbody></table>
+      <table><caption>Proceso</caption><tbody>${filasImpresion(p.proceso) || '<tr><td>Sin valores</td></tr>'}</tbody></table>
+      <table><caption>Palet</caption><tbody>
+        <tr><th>Tipo</th><td>${esc(p.tipo_palet || '')}</td></tr>
+        <tr><th>Capas</th><td>${esc(p.n_capas || '')}</td></tr>
+        <tr><th>Cajas/palet</th><td>${esc(p.cajas_palet || '')}</td></tr>
+        <tr><th>Uds/caja</th><td>${esc(p.uds_caja || '')}</td></tr>
+        <tr><th>Uds/palet</th><td>${esc(p.uds_palet || '')}</td></tr>
+      </tbody></table>
+    </div>
+    ${p.observaciones ? `<p class="imp-obs"><strong>Observaciones.</strong> ${esc(p.observaciones)}</p>` : ''}
+    ${etiqueta ? `<figure class="imp-fig"><img src="${esc(etiqueta.url)}" alt="${esc(etiqueta.alt)}" data-hash="${esc(etiqueta.hash || '')}"><figcaption>${esc(etiqueta.alt)}</figcaption></figure>` : ''}
+    <p class="imp-pie">Valores tal cual en el PDF. Documento para consulta interna.</p>
+  </section>`;
+}
+
+export function htmlProducto({ p, hermanos, galeria, vacios, enComparar, favorito = false, modificada = false }) {
   const incs = p.incidencias || [];
   const banner = incs.length ? `<aside class="banner-inc" role="status">
       <div class="banner-ico">${icono('warning')}</div>
@@ -403,6 +475,8 @@ export function htmlProducto({ p, hermanos, galeria, vacios, enComparar }) {
   ];
   const paginas = (p.fuente?.paginas || []).join(', ');
   return `<article class="ficha" data-sap="${esc(p.codigo_sap)}">
+    ${htmlImpresion(p, galeria)}
+    <div class="pantalla">
     <div class="print-head"><span class="wordmark sm">refresc<span>o</span></span><span>Ficha de producto terminado · Planta Alcolea</span><span>SAP ${esc(p.codigo_sap)}</span></div>
     ${banner}
     <header class="hero-prod">
@@ -421,12 +495,15 @@ export function htmlProducto({ p, hermanos, galeria, vacios, enComparar }) {
         <span class="badge">${esc(p.marca || '')}</span>
         <span class="badge">${p.con_gas_derivado ? 'Con gas' : 'Sin gas'}</span>
         ${p.aseptico ? '<span class="badge">Aséptico</span>' : ''}
+        ${modificada ? '<span class="badge badge-nueva">Modificada en esta versión</span>' : ''}
       </div>
       <p class="hero-meta">Fecha ${esc(p.fecha)} · Edición ${esc(p.edicion)} · Consumo preferente ${esc(p.consumo_preferente)}</p>
       <div class="acciones no-print">
+        <button type="button" class="btn btn-star${favorito ? ' is-on' : ''}" data-act="fav" data-sap="${esc(p.codigo_sap)}" aria-pressed="${favorito ? 'true' : 'false'}" aria-label="${favorito ? 'Quitar de favoritas' : 'Guardar como favorita'}">${icono('star')} ${favorito ? 'En favoritas' : 'Favorita'}</button>
         <button type="button" class="btn btn-primary" data-act="imprimir">${icono('print')} Imprimir / PDF</button>
+        <button type="button" class="btn btn-secondary" data-act="compartir" data-sap="${esc(p.codigo_sap)}">${icono('share')} Compartir</button>
         <button type="button" class="btn btn-secondary" data-act="comparar-toggle" data-sap="${esc(p.codigo_sap)}">${enComparar ? 'Quitar de comparar' : 'Comparar'}</button>
-        <button type="button" class="btn btn-ghost light" data-act="copiar-enlace">${icono('link')} Copiar enlace</button>
+        <button type="button" class="btn btn-ghost light" data-act="copiar-analisis">Copiar análisis</button>
         <button type="button" class="btn btn-ghost light" data-act="vacios" aria-pressed="${vacios ? 'true' : 'false'}">${vacios ? 'Ocultar vacíos' : 'Mostrar vacíos'}</button>
       </div>
     </header>
@@ -445,6 +522,7 @@ export function htmlProducto({ p, hermanos, galeria, vacios, enComparar }) {
       ['PDF', p.fuente?.pdf || null],
       ['Páginas del PDF', paginas || null],
     ], false), { open: false })}
+    </div>
   </article>`;
 }
 
@@ -618,6 +696,70 @@ export function htmlCodigoG({ codigo, productos }) {
     <h2>Fichas que lo usan</h2>
     <div class="cards">${productos.map(htmlTarjeta).join('')}</div>
   </section>`;
+}
+
+function valorCambio(valor) {
+  if (valor == null || valor === '') return 'vacío';
+  if (typeof valor === 'string') return valor;
+  if (typeof valor === 'number' || typeof valor === 'boolean') return String(valor);
+  try { return JSON.stringify(valor); } catch { return String(valor); }
+}
+
+export function htmlNovedades(cambios) {
+  if (!cambios) {
+    return `<section><h1>Novedades</h1><p class="lead">Versión inicial: sin cambios registrados.</p></section>`;
+  }
+  const resumen = cambios.resumen || {};
+  const bloque = (titulo, items, modificado) => {
+    if (!items.length) return `<section class="panel"><h2>${esc(titulo)}</h2><p class="vacio">Ninguna.</p></section>`;
+    return `<section class="panel"><h2>${esc(titulo)}</h2><ul class="novedades">${items.map((item) => {
+      const enlace = item.sap ? `<a href="?sap=${encodeURIComponent(item.sap)}"><strong>SAP ${esc(item.sap)}</strong> ${esc(item.denominacion || '')}</a>` : `<strong>${esc(item.denominacion || '')}</strong>`;
+      const campos = modificado && Array.isArray(item.campos) ? `<ul class="cambios">${item.campos.map((campo) => `<li><span>${esc(campo.etiqueta || campo.ruta || '')}</span><span class="antes">${esc(valorCambio(campo.antes))}</span><span class="despues">${esc(valorCambio(campo.despues))}</span></li>`).join('')}</ul>` : '';
+      return `<li>${enlace}${campos}</li>`;
+    }).join('')}</ul></section>`;
+  };
+  return `<section>
+    <h1>Novedades</h1>
+    <p class="lead">De ${esc(cambios.fecha_anterior || '—')} a ${esc(cambios.fecha_actual || '—')}.</p>
+    <div class="stats">
+      <div class="stat stat-quiet"><b>${Number(resumen.altas) || 0}</b><span>Altas</span></div>
+      <div class="stat stat-quiet"><b>${Number(resumen.bajas) || 0}</b><span>Bajas</span></div>
+      <div class="stat stat-quiet"><b>${Number(resumen.modificados) || 0}</b><span>Modificadas</span></div>
+    </div>
+    ${bloque('Altas', cambios.altas || [], false)}
+    ${bloque('Bajas', cambios.bajas || [], false)}
+    ${bloque('Modificadas', cambios.modificados || [], true)}
+  </section>`;
+}
+
+export function htmlResultadoEan({ codigo, productosLista }) {
+  if (!productosLista.length) {
+    return `<section><h1>Código de barras</h1><p class="lead">Ninguna ficha tiene el EAN ${esc(codigo)}.</p><p>Se han buscado la unidad, el pack, la caja y el palet, con y sin ceros a la izquierda.</p></section>`;
+  }
+  return `<section><h1>${productosLista.length} ficha${productosLista.length === 1 ? '' : 's'} con el EAN ${esc(codigo)}</h1><div class="cards">${productosLista.map(htmlTarjeta).join('')}</div></section>`;
+}
+
+export function htmlEscaner() {
+  return `<div class="scan" role="dialog" aria-modal="true" aria-label="Escanear código de barras">
+    <div class="scan-bar">
+      <p>Apunta al código de barras de la botella o de la caja.</p>
+      <button type="button" class="btn btn-ghost" data-act="cerrar-escaner">Cerrar</button>
+    </div>
+    <video class="scan-video" autoplay playsinline muted></video>
+    <p class="scan-estado" role="status"></p>
+  </div>`;
+}
+
+export function htmlCompartir(sap) {
+  return `<div class="share" role="dialog" aria-modal="true" aria-labelledby="share-tit">
+    <h2 id="share-tit">Compartir SAP ${esc(sap)}</h2>
+    <p>El enlace solo funciona para quien tenga la contraseña de la aplicación. Los datos no viajan en el enlace: se descifran en el dispositivo.</p>
+    <div class="acciones">
+      <button type="button" class="btn btn-primary" data-act="compartir-ahora" data-sap="${esc(sap)}">${icono('share')} Compartir</button>
+      <button type="button" class="btn btn-secondary" data-act="copiar-sap" data-sap="${esc(sap)}">Copiar enlace</button>
+      <button type="button" class="btn btn-ghost" data-act="cerrar-compartir">Cerrar</button>
+    </div>
+  </div>`;
 }
 
 export function htmlLightbox(lb) {
