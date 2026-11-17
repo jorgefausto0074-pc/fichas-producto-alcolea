@@ -150,7 +150,12 @@ function chip(k, valor, etiqueta, activo, cuenta) {
 
 function filaChips(titulo, clave, opciones, actual) {
   const chips = [chip(clave, '', 'Todas', !actual, null)].concat(
-    opciones.map(([valor, n]) => chip(clave, valor, valor, actual === valor, n)),
+    opciones.map((item) => {
+      const valor = Array.isArray(item) ? item[0] : item.clave;
+      const n = Array.isArray(item) ? item[1] : item.total;
+      const etiqueta = Array.isArray(item) ? (item[2] || item[0]) : item.etiqueta;
+      return chip(clave, valor, etiqueta, actual === valor, n);
+    }),
   );
   return `<div class="chip-row"><span class="chip-label" id="lab-${esc(clave)}">${esc(titulo)}</span><div class="chip-scroller" role="group" aria-labelledby="lab-${esc(clave)}">${chips.join('')}</div></div>`;
 }
@@ -225,6 +230,14 @@ export function htmlShell({ fecha }) {
   </div>`;
 }
 
+function notaCodigosG(stats) {
+  const otros = (stats.noG || [])
+    .map((item) => `${item.codigo} (${item.n} ${item.n === 1 ? 'ficha' : 'fichas'})`)
+    .join(', ');
+  const combinado = (stats.noG || []).some((item) => String(item.codigo).includes('/'));
+  return `${stats.codigosG} códigos G: SAP Mezcla con forma G y dígitos, de ${stats.mezclas} valores distintos. No cuentan como código G: ${otros}.${combinado ? ' El valor con barra se conserva entero y no se divide en dos códigos.' : ''} ${stats.compartidosG} de esos ${stats.codigosG} los comparten varias fichas (${stats.compartidosMezcla} si se cuentan los ${stats.mezclas} valores de mezcla).`;
+}
+
 export function htmlInicio({ fechaHumana, bruto, stats, formatos, familias, marcas, recientes, fuentes }) {
   const maxF = Math.max(...formatos.map(([, n]) => n), 1);
   const maxFam = Math.max(...familias.map(([, n]) => n), 1);
@@ -248,7 +261,7 @@ export function htmlInicio({ fechaHumana, bruto, stats, formatos, familias, marc
       <button type="button" class="stat" data-act="filtro" data-k="inc" data-v="1"><b>${stats.incidencias}</b><span>Incidencias</span></button>
       <div class="stat stat-quiet"><b>${stats.imagenes}</b><span>Imágenes</span></div>
     </div>
-    <p class="nota centro">${stats.compartidos} códigos G los comparten varias fichas SAP. ${stats.fichasInc} fichas traen avisos del PDF de origen.</p>
+    <p class="nota centro">${notaCodigosG(stats)} ${stats.fichasInc} fichas traen avisos del PDF de origen.</p>
     <div class="paneles">
       <section class="panel">
         <h2>Por formato</h2>
@@ -261,7 +274,7 @@ export function htmlInicio({ fechaHumana, bruto, stats, formatos, familias, marc
     </div>
     <section class="panel">
       <h2>Por marca</h2>
-      <div class="marca-grid">${marcas.map(([valor, n]) => `<button type="button" class="marca" data-act="filtro" data-k="marca" data-v="${esc(valor)}">${esc(valor)} <b>${n}</b></button>`).join('')}</div>
+      <div class="marca-grid">${marcas.map((m) => `<button type="button" class="marca" data-act="filtro" data-k="marca" data-v="${esc(m.clave)}">${esc(m.etiqueta)} <b>${m.total}</b></button>`).join('')}</div>
     </section>
     <section class="panel">
       <h2>Fichas con fecha más reciente</h2>
@@ -351,7 +364,7 @@ function htmlGaleria(galeria) {
   }
   const grid = `<div class="galeria">${galeria.map((g, i) => `
     <button type="button" class="gal-item" data-act="lb" data-i="${i}">
-      <img src="${esc(g.url)}" alt="${esc(g.alt)}" width="${Number(g.ancho) || ''}" height="${Number(g.alto) || ''}">
+      <img src="${esc(g.url)}" alt="${esc(g.alt)}" width="${Number(g.ancho) || ''}" height="${Number(g.alto) || ''}" data-hash="${esc(g.hash || '')}">
       <span>${esc(g.alt)}</span>
     </button>`).join('')}</div>`;
   return seccion('Imágenes de la página 2', 'image', `<p class="nota">Dibujos recortados de la página 2. Pulsa para ampliar.</p>${grid}`, {
@@ -474,19 +487,31 @@ const COMPARE_SIMPLES = [
   ['observaciones', 'Observaciones'],
 ];
 
-export function htmlComparar({ productos, sugerencias }) {
+function htmlRelacionados(productos, relacionados) {
+  const lista = relacionados || [];
+  if (!lista.length || productos.length >= 3) return '';
+  return `<div class="sug-cmp">
+    <p class="nota">Otras fichas con el mismo SAP Mezcla. El texto entre paréntesis, si aparece, forma parte del nombre impreso en la ficha.</p>
+    <div class="chip-scroller">${lista.map((p) => `<button type="button" class="chip sug" data-act="comparar-toggle" data-sap="${esc(p.codigo_sap)}">
+      <span>Añadir SAP ${esc(p.codigo_sap)}</span>
+      <span class="sug-mezcla">${esc(p.sap_mezcla || '')}</span>
+      <span class="sug-nombre">${esc(p.producto)}</span>
+    </button>`).join('')}</div>
+  </div>`;
+}
+
+export function htmlComparar({ productos, relacionados }) {
   if (productos.length < 2) {
-    const sug = (sugerencias || []).map((p) => `<button type="button" class="chip" data-act="comparar-toggle" data-sap="${esc(p.codigo_sap)}">Añadir ${esc(p.codigo_sap)}</button>`).join('');
     return `<section class="comparar">
       <h1>Comparar fichas</h1>
       <p class="lead">Elige de 2 a 3 productos. Las casillas que no coinciden se marcan.</p>
-      <div class="slots">${productos.map((p) => `<div class="slot"><strong>${esc(p.codigo_sap)}</strong> ${esc(p.producto)} <button type="button" data-act="comparar-toggle" data-sap="${esc(p.codigo_sap)}">Quitar</button></div>`).join('') || '<p class="vacio">Todavía no hay fichas.</p>'}
+      <div class="slots">${productos.map((p) => `<div class="slot"><strong>${esc(p.codigo_sap)}</strong> <span>${esc(p.producto)}</span> <button type="button" data-act="comparar-toggle" data-sap="${esc(p.codigo_sap)}">Quitar</button></div>`).join('') || '<p class="vacio">Todavía no hay fichas. Abre una ficha y pulsa Comparar.</p>'}
       </div>
-      <p class="nota">Busca en la barra de arriba y pulsa Comparar en la ficha, o añade uno de estos resultados.</p>
-      <div class="chip-scroller">${sug}</div>
+      <p class="nota">Abre una ficha y pulsa Comparar. Aquí solo se proponen fichas que comparten el SAP Mezcla de las que ya has elegido.</p>
+      ${htmlRelacionados(productos, relacionados)}
     </section>`;
   }
-  const cabezas = productos.map((p) => `<th scope="col"><a href="?sap=${encodeURIComponent(p.codigo_sap)}"><span class="badge">SAP ${esc(p.codigo_sap)}</span><br>${esc(p.producto)}</a><button type="button" class="btn btn-ghost" data-act="comparar-toggle" data-sap="${esc(p.codigo_sap)}">Quitar</button></th>`).join('');
+  const cabezas = productos.map((p) => `<th scope="col"><div class="cmp-head"><a class="cmp-ficha" href="?sap=${encodeURIComponent(p.codigo_sap)}"><span class="badge">SAP ${esc(p.codigo_sap)}</span><span class="cmp-nombre">${esc(p.producto)}</span></a><button type="button" class="btn btn-ghost" data-act="comparar-toggle" data-sap="${esc(p.codigo_sap)}">Quitar</button></div></th>`).join('');
   const fila = (etiqueta, valores) => {
     const distintos = new Set(valores).size > 1;
     return `<tr class="${distintos ? 'diff' : 'same'}"><th scope="row">${esc(etiqueta)}</th>${valores.map((v) => `<td>${esc(v)}</td>`).join('')}</tr>`;
@@ -516,11 +541,10 @@ export function htmlComparar({ productos, sugerencias }) {
     }
     bloques.push('</tbody>');
   }
-  const sug = (sugerencias || []).filter((p) => !productos.some((x) => x.codigo_sap === p.codigo_sap)).slice(0, 6);
   return `<section class="comparar">
     <h1>Comparar ${productos.length} fichas</h1>
     <p class="lead">El naranja marca filas que no coinciden. Los números son los del PDF, sin redondear.</p>
-    ${productos.length < 3 && sug.length ? `<div class="chip-scroller no-print">${sug.map((p) => `<button type="button" class="chip" data-act="comparar-toggle" data-sap="${esc(p.codigo_sap)}">Añadir ${esc(p.codigo_sap)} ${esc(p.producto)}</button>`).join('')}</div>` : ''}
+    ${htmlRelacionados(productos, relacionados)}
     <div class="cmp-wrap">
       <table class="cmp">
         <thead><tr><th scope="col">Campo</th>${cabezas}</tr></thead>
@@ -610,7 +634,7 @@ export function htmlLightbox(lb) {
     </div>
     <button type="button" class="lb-nav prev" data-act="lb-nav" data-dir="-1" aria-label="Imagen anterior">${icono('chevron')}</button>
     <div id="lb-stage" class="lb-stage">
-      <img id="lb-img" alt="${esc(item.alt)}" src="${esc(item.url)}" draggable="false">
+      <img id="lb-img" alt="${esc(item.alt)}" src="${esc(item.url)}" data-hash="${esc(item.hash || '')}" draggable="false">
     </div>
     <button type="button" class="lb-nav next" data-act="lb-nav" data-dir="1" aria-label="Imagen siguiente">${icono('chevron')}</button>
   </div>`;

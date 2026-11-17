@@ -45,6 +45,44 @@ export function esCodigoG(s) {
   return /^G\d+$/i.test(String(s || '').trim());
 }
 
+/** Clave de filtro: misma marca si solo cambian mayúsculas o tildes. */
+export function claveMarca(marca) {
+  return normalizar(marca).replace(/\s+/g, ' ').trim();
+}
+
+function esTodoMayusculas(s) {
+  const letras = String(s).match(/\p{L}/gu) || [];
+  return letras.length > 0 && letras.every((ch) => ch === ch.toUpperCase() && ch !== ch.toLowerCase());
+}
+
+export function agruparMarcas(productos) {
+  const grupos = new Map();
+  for (const p of productos) {
+    const nombre = p.marca;
+    if (nombre == null || nombre === '') continue;
+    const clave = claveMarca(nombre);
+    if (!grupos.has(clave)) grupos.set(clave, new Map());
+    const vars = grupos.get(clave);
+    vars.set(nombre, (vars.get(nombre) || 0) + 1);
+  }
+  const out = [];
+  for (const [clave, vars] of grupos) {
+    const variantes = [...vars.entries()]
+      .map(([nombre, n]) => ({ nombre, n }))
+      .sort((a, b) => b.n - a.n || a.nombre.localeCompare(b.nombre, 'es'));
+    const legible = variantes.find((v) => !esTodoMayusculas(v.nombre));
+    const total = variantes.reduce((s, v) => s + v.n, 0);
+    out.push({
+      clave,
+      etiqueta: (legible || variantes[0]).nombre,
+      total,
+      variantes,
+    });
+  }
+  out.sort((a, b) => b.total - a.total || a.etiqueta.localeCompare(b.etiqueta, 'es'));
+  return out;
+}
+
 export function tieneDatos(fila) {
   if (!fila || typeof fila !== 'object') return false;
   return Object.keys(fila).some((k) => k !== 'etiqueta' && fila[k] != null && fila[k] !== '');

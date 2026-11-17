@@ -7,6 +7,7 @@ import { createHash } from 'crypto';
 import { fileURLToPath } from 'url';
 import { abrirPaquete } from '../js/descifrar.js';
 import { filtrar } from '../js/buscar.js';
+import { agruparMarcas, esCodigoG } from '../js/util.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const password = process.env.PT_PASSWORD || '';
@@ -69,6 +70,19 @@ for (const p of productos) {
 ok(nInc === 47, '47 incidencias');
 ok(porG.size === 89, '89 códigos de mezcla');
 ok([...porG.values()].filter((n) => n > 1).length === 56, '56 códigos compartidos');
+const puros = [...porG.keys()].filter((g) => esCodigoG(g));
+const raros = [...porG.keys()].filter((g) => g && !esCodigoG(g)).sort();
+ok(puros.length === 86, '86 códigos G con forma G y dígitos');
+ok(raros.length === 3 && raros.includes('6000179') && raros.includes('6000702') && raros.includes('G001467/G001471'), 'tres mezclas que no son un código G');
+const marcas = agruparMarcas(productos);
+const pingo = marcas.find((m) => m.clave === 'pingo doce');
+const look = marcas.find((m) => m.clave === 'look');
+ok(pingo && pingo.total === 30 && pingo.etiqueta === 'Pingo Doce', 'Pingo Doce agrupa las dos grafías');
+ok(look && look.total === 23 && look.etiqueta === 'Look', 'Look agrupa LOOK y Look');
+ok(filtrar(productos, { marca: 'Pingo Doce' }).length === 30, 'el filtro de marca incluye las dos grafías');
+ok(filtrar(productos, { marca: 'PINGO DOCE' }).every((p) => p.marca === 'PINGO DOCE' || p.marca === 'Pingo Doce'), 'el filtro no reescribe la marca');
+const ejemploMarca = productos.find((p) => p.codigo_sap === '1005610');
+ok(ejemploMarca.marca === 'HACENDADO', 'la ficha conserva la marca original');
 
 function primero(q, extra = {}) {
   return filtrar(productos, { q, ...extra })[0]?.codigo_sap;
