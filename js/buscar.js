@@ -1,4 +1,4 @@
-import { compactar, normalizar, EAN_CLAVES } from './util.js';
+import { claveMarca, compactar, normalizar, EAN_CLAVES } from './util.js';
 
 export function eansDe(p) {
   const d = p.diseno || {};
@@ -100,7 +100,10 @@ export function filtrar(productos, { q = '', grupo = '', formato = '', familia =
   else if (grupo === 'carbonatados') list = list.filter((p) => p.grupo_pdf === 'No asépticos');
   if (formato) list = list.filter((p) => p.formato === formato);
   if (familia) list = list.filter((p) => p.familia_derivada === familia);
-  if (marca) list = list.filter((p) => p.marca === marca);
+  if (marca) {
+    const clave = claveMarca(marca);
+    list = list.filter((p) => claveMarca(p.marca) === clave);
+  }
   if (inc) list = list.filter((p) => p.incidencias?.length);
   const consulta = String(q || '').trim();
   if (!consulta) {

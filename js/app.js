@@ -2,7 +2,7 @@ import { derivarClave, descifrarConClave } from './descifrar.js';
 import { guardarClave, leerClave, borrarClave } from './sesion.js';
 import { obtenerFormato, obtenerCifrado, indexar } from './cargar.js';
 import { filtrar } from './buscar.js';
-import { compactar, esCodigoG, fechaPaquete, ordenFecha, CASILLAS } from './util.js';
+import { agruparMarcas, compactar, esCodigoG, fechaPaquete, ordenFecha, CASILLAS } from './util.js';
 import { contarValores } from './buscar.js';
 import {
   htmlLogin, htmlShell, htmlInicio, htmlBuscar, htmlResultados, htmlProducto,
@@ -136,7 +136,7 @@ function ctxBuscar() {
     avisoMezcla: mezclaDeConsulta(state.q),
     formatos: contarValores(productos(), 'formato'),
     familias: contarValores(productos(), 'familia_derivada'),
-    marcas: contarValores(productos(), 'marca'),
+    marcas: agruparMarcas(productos()),
     nInc: productos().filter((p) => p.incidencias?.length).length,
   };
 }
@@ -165,10 +165,84 @@ function urlDeHash(hash) {
   const m = state.imagenes?.[hash];
   if (!m) return null;
   const blob = new Blob([state.blob.subarray(m.offset, m.offset + m.longitud)], { type: m.mime || 'image/jpeg' });
-  const url = URL.createObjectURL(blob);
-  const meta = { url, ancho: m.ancho, alto: m.alto };
+  const meta = { url: URL.createObjectURL(blob), ancho: m.ancho, alto: m.alto, hash };
   urls.set(hash, meta);
+  recortarMargen(blob).then((recorte) => {
+    if (!recorte || !urls.has(hash)) return;
+    const nuevo = URL.createObjectURL(recorte.blob);
+    const anterior = meta.url;
+    meta.url = nuevo;
+    meta.ancho = recorte.ancho;
+    meta.alto = recorte.alto;
+    state.galeriaActual.forEach((item) => {
+      if (item.hash === hash) {
+        item.url = nuevo;
+        item.ancho = recorte.ancho;
+        item.alto = recorte.alto;
+      }
+    });
+    document.querySelectorAll(`img[data-hash="${hash}"]`).forEach((img) => {
+      img.src = nuevo;
+      img.width = recorte.ancho;
+      img.height = recorte.alto;
+    });
+    URL.revokeObjectURL(anterior);
+  }).catch(() => {});
   return meta;
+}
+
+/** Quita el margen blanco del recorte del PDF solo para mostrarlo. No altera el paquete. */
+async function recortarMargen(blob) {
+  if (typeof createImageBitmap !== 'function') return null;
+  const bmp = await createImageBitmap(blob);
+  const lienzo = document.createElement('canvas');
+  lienzo.width = bmp.width;
+  lienzo.height = bmp.height;
+  const ctx = lienzo.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.drawImage(bmp, 0, 0);
+  const { data, width, height } = ctx.getImageData(0, 0, bmp.width, bmp.height);
+  const esTinta = (x, y) => {
+    const i = (y * width + x) * 4;
+    return data[i] < 246 || data[i + 1] < 246 || data[i + 2] < 246;
+  };
+  const filaVacia = (y) => {
+    let tinta = 0;
+    for (let x = 0; x < width; x += 1) if (esTinta(x, y)) tinta += 1;
+    return tinta < Math.max(2, width * 0.004);
+  };
+  const columnaVacia = (x) => {
+    let tinta = 0;
+    for (let y = 0; y < height; y += 1) if (esTinta(x, y)) tinta += 1;
+    return tinta < Math.max(2, height * 0.004);
+  };
+  let minX = 0;
+  let minY = 0;
+  let maxX = width - 1;
+  let maxY = height - 1;
+  while (minY < maxY && filaVacia(minY)) minY += 1;
+  while (maxY > minY && filaVacia(maxY)) maxY -= 1;
+  while (minX < maxX && columnaVacia(minX)) minX += 1;
+  while (maxX > minX && columnaVacia(maxX)) maxX -= 1;
+  if (maxX <= minX || maxY <= minY) return null;
+  const margen = 6;
+  minX = Math.max(0, minX - margen);
+  minY = Math.max(0, minY - margen);
+  maxX = Math.min(width - 1, maxX + margen);
+  maxY = Math.min(height - 1, maxY + margen);
+  const w = maxX - minX + 1;
+  const h = maxY - minY + 1;
+  const pocaGanancia = w > width * 0.92 && h > height * 0.92;
+  const demasiado = w * h < width * height * 0.15;
+  if (pocaGanancia || demasiado) return null;
+  const salida = document.createElement('canvas');
+  salida.width = w;
+  salida.height = h;
+  salida.getContext('2d').drawImage(bmp, minX, minY, w, h, 0, 0, w, h);
+  const recorte = await new Promise((resolver) => salida.toBlob(resolver, 'image/jpeg', 0.92));
+  bmp.close?.();
+  if (!recorte) return null;
+  return { blob: recorte, ancho: w, alto: h };
 }
 
 function urlImagen(p, casilla) {
@@ -183,7 +257,7 @@ function galeriaDe(p) {
     if (!disponibles.has(casilla)) continue;
     const meta = urlImagen(p, casilla);
     if (!meta) continue;
-    out.push({ casilla, alt, url: meta.url, ancho: meta.ancho, alto: meta.alto });
+    out.push({ casilla, alt, url: meta.url, ancho: meta.ancho, alto: meta.alto, hash: meta.hash });
   }
   return out;
 }
@@ -215,6 +289,7 @@ function pintarThumb(el) {
   const img = document.createElement('img');
   img.alt = '';
   img.decoding = 'async';
+  img.dataset.hash = meta.hash;
   img.src = meta.url;
   el.appendChild(img);
 }
@@ -241,8 +316,7 @@ function htmlDeVista() {
   if (r.vista === 'comparar') {
     const lista = state.comparar.map((sap) => state.porSap.get(sap)).filter(Boolean);
     state.comparar = lista.map((p) => p.codigo_sap);
-    const sugerencias = state.q ? filtrar(productos(), { q: state.q }).slice(0, 8) : filtrar(productos(), {}).slice(0, 0);
-    return htmlComparar({ productos: lista, sugerencias });
+    return htmlComparar({ productos: lista, relacionados: relacionadosComparar(lista) });
   }
   if (r.vista === 'codigos') return htmlCodigos({ ...listaCodigos(), q: state.qG });
   if (r.vista === 'g') {
@@ -250,6 +324,20 @@ function htmlDeVista() {
     return htmlCodigoG(hallado);
   }
   return htmlInicio(datosInicio());
+}
+
+function relacionadosComparar(lista) {
+  const ya = new Set(lista.map((p) => p.codigo_sap));
+  const vistos = new Set();
+  const out = [];
+  for (const p of lista) {
+    for (const hermano of state.porMezcla.get(p.sap_mezcla) || []) {
+      if (ya.has(hermano.codigo_sap) || vistos.has(hermano.codigo_sap)) continue;
+      vistos.add(hermano.codigo_sap);
+      out.push(hermano);
+    }
+  }
+  return out.slice(0, 6);
 }
 
 function escapeHtml(s) {
@@ -260,13 +348,23 @@ function datosInicio() {
   const lista = productos();
   const asepticos = lista.filter((p) => p.grupo_pdf === 'Asépticos').length;
   const carbonatados = lista.filter((p) => p.grupo_pdf === 'No asépticos').length;
-  let compartidos = 0;
+  let compartidosG = 0;
+  let compartidosMezcla = 0;
   let codigosG = 0;
+  let mezclas = 0;
+  const noG = [];
   for (const [codigo, arr] of state.porMezcla) {
-    if (!esCodigoG(codigo)) continue;
+    if (!codigo) continue;
+    mezclas += 1;
+    if (arr.length > 1) compartidosMezcla += 1;
+    if (!esCodigoG(codigo)) {
+      noG.push({ codigo, n: arr.length });
+      continue;
+    }
     codigosG += 1;
-    if (arr.length > 1) compartidos += 1;
+    if (arr.length > 1) compartidosG += 1;
   }
+  noG.sort((a, b) => a.codigo.localeCompare(b.codigo, 'es', { numeric: true }));
   const recientes = lista.slice().sort((a, b) => (
     ordenFecha(b.fecha) - ordenFecha(a.fecha) || b.codigo_sap.localeCompare(a.codigo_sap)
   )).slice(0, 8);
@@ -278,14 +376,17 @@ function datosInicio() {
       asepticos,
       carbonatados,
       codigosG,
-      compartidos,
+      compartidosG,
+      compartidosMezcla,
+      mezclas,
+      noG,
       imagenes: Object.keys(state.imagenes || {}).length,
       incidencias: lista.reduce((n, p) => n + (p.incidencias?.length || 0), 0),
       fichasInc: lista.filter((p) => p.incidencias?.length).length,
     },
     formatos: contarValores(lista, 'formato'),
     familias: contarValores(lista, 'familia_derivada'),
-    marcas: contarValores(lista, 'marca'),
+    marcas: agruparMarcas(lista),
     recientes,
     fuentes: state.formato?.fuentes || [],
   };
@@ -584,7 +685,11 @@ function onQuery(value) {
 
 function abrirLb(indice) {
   if (!state.galeriaActual.length) return;
-  state.lb = { items: state.galeriaActual, index: indice, scale: 1, x: 0, y: 0 };
+  const items = state.galeriaActual.map((item) => {
+    const viva = item.hash && urls.get(item.hash);
+    return viva ? { ...item, url: viva.url, ancho: viva.ancho, alto: viva.alto } : item;
+  });
+  state.lb = { items, index: indice, scale: 1, x: 0, y: 0 };
   pintarLb(true);
   document.body.classList.add('lb-open');
 }
