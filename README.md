@@ -31,9 +31,9 @@ ACCESO_TOKEN='github_pat_…' ACCESO_CLAVE='la clave de actualización' node too
 `ACCESO_TOKEN` es un token fino con Contents (lectura y escritura) y Actions (lectura y escritura), solo de este repositorio. `ACCESO_CLAVE` es una clave distinta de la contraseña de la aplicación. El comando escribe `acceso.enc`. Súbelo con git y no pegues el token en ningún sitio.
 
 2. En la aplicación, entra con la contraseña de siempre. Abre **Actualizar fichas**, escribe la clave de actualización y, si quieres, márcala para recordarla en ese dispositivo. Se guarda una clave no exportable; el token no se muestra.
-3. Elige uno o dos PDF del informe de Access (asépticos, no asépticos, o los dos). El navegador los cifra con la contraseña de la aplicación y los sube como `entrada.enc` a un **borrador** de release llamado `actualizacion-pendiente`. No entran en el historial de `main` y, al ser borrador, no son públicos.
+3. Elige uno o dos PDF del informe de Access (asépticos, no asépticos, o los dos). El navegador los cifra con la contraseña de la aplicación y los sube como `entrada.enc` a la rama temporal `actualizacion-pendiente` (un commit suelto, sin relación con `main`). No entran en el historial de `main`. Van cifrados con la misma contraseña que `datos.enc`, así que no se leen sin ella. Se usa una rama y no un borrador de release porque `uploads.github.com` no admite peticiones desde el navegador (CORS).
 4. La aplicación lanza el flujo **Actualizar fichas** en modo `revisar`. Tarda unos minutos. Al terminar muestra altas, bajas, modificadas (antes → después), incidencias y avisos.
-5. **Aprobar y publicar** lanza el modo `aplicar`. Solo se commitean `datos.enc` y `formato.json`. Luego se borra el borrador. **Descartar** borra el borrador sin publicar.
+5. **Aprobar y publicar** lanza el modo `aplicar`. Solo se commitean `datos.enc` y `formato.json`. Luego se borra la rama `actualizacion-pendiente`. **Descartar** borra la rama sin publicar.
 6. Cuando diga Publicado, recarga. La aplicación pide `datos.enc?v=<sha256>` nuevo.
 
 Si la clave de actualización es incorrecta, lo dice y no sigue. Si el PDF no es un informe de Alcolea, el flujo termina con un aviso y un enlace a la ejecución. Si las fichas publicadas cambiaron entre la revisión y la aprobación, hay que descartar y revisar otra vez.
