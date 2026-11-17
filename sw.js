@@ -34,6 +34,11 @@ const SHELL_FILES = [
   'img/marca2026/foto-linea-2.webp',
   'img/marca2026/foto-linea-3.webp',
   'img/marca2026/foto-linea-4.webp',
+  'img/marca2026/foto-linea-5.webp',
+  'img/marca2026/foto-linea-6.webp',
+  'img/marca2026/foto-linea-7.webp',
+  'img/marca2026/refresco-r-naranja.png',
+  'img/marca2026/stripe-r-azul.svg',
 ].map((ruta) => new URL(ruta, BASE).href);
 
 self.addEventListener('install', (event) => {

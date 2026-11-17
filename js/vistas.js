@@ -232,8 +232,9 @@ export function htmlShell({ fecha }) {
     <a class="skip" href="#contenido">Saltar al contenido</a>
     <header class="topbar">
       <div class="topbar-row">
+        <img class="topbar-stripe" src="img/marca2026/stripe-r-naranja.svg" alt="" aria-hidden="true">
         <a class="brand" href="./" data-go="inicio">
-          <span class="wordmark">refresc<span>o</span></span>
+          <img class="brand-logo" src="img/marca2026/refresco-logo-naranja.png" alt="Refresco">
           <span class="brand-sub">Fichas · Alcolea</span>
         </a>
         <div class="top-actions">
@@ -263,11 +264,13 @@ export function htmlShell({ fecha }) {
     <main id="contenido" tabindex="-1"></main>
     <div id="dock" class="dock" hidden></div>
     <footer class="pie">
-      <p><span class="wordmark sm">refresc<span>o</span></span> Iberia · Planta Alcolea</p>
+      <img class="pie-r" src="img/marca2026/refresco-r-naranja.png" alt="" aria-hidden="true">
+      <p><strong>Refresco Iberia</strong> · Planta Alcolea</p>
       <p>Fichas de producto terminado · Coordinación de Calidad</p>
       <p>Jorge Quezada Ortega · Coordinador de Calidad</p>
       <p>Datos del ${esc(fecha)}. Los valores se muestran tal cual en el PDF de origen.</p>
       <p><a class="enlace-discreto" href="?vista=actualizar" data-go="actualizar">Actualizar fichas</a></p>
+      <p class="pie-tagline">The agile beverage solutions partner.</p>
     </footer>
   </div>`;
 }
@@ -299,6 +302,7 @@ export function htmlInicio({ fechaHumana, bruto, stats, formatos, familias, marc
       <h1>Fichas de producto terminado</h1>
       <p>Busca por código SAP o código G, o recorre formato, familia y marca. Nada se redondea: si el PDF trae una incoherencia, se avisa y se deja el valor.</p>
       <p class="fecha-datos">Datos del <strong>${esc(fechaHumana)}</strong> <span class="bruto">${esc(bruto)}</span></p>
+      <div class="hero-cinta" aria-hidden="true">${[1, 2, 3, 4, 5, 6, 7].map((n) => `<img src="img/marca2026/foto-linea-${n}.webp" alt="" loading="lazy">`).join('')}</div>
     </section>
     <div class="stats">
       <button type="button" class="stat" data-go="buscar"><b>${stats.n}</b><span>Fichas</span></button>
