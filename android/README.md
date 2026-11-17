@@ -4,7 +4,7 @@ Aplicación nativa mínima. El WebView abre la web publicada:
 
 https://jorgefausto0074-pc.github.io/fichas-producto-alcolea/
 
-El APK no contiene `datos.enc` ni fichas. El código, los datos y el service worker son los de esa web, así que una actualización publicada en GitHub Pages llega al reinstalar la página dentro de la aplicación. La caché sin conexión queda en el almacenamiento de la aplicación.
+El APK no contiene `datos.enc` ni fichas. El código, los datos y el service worker son los de esa web, así que una actualización publicada en GitHub Pages llega al abrir la aplicación. La caché sin conexión queda en el almacenamiento de la aplicación.
 
 - Nombre: Fichas Alcolea
 - Id: `com.jorgefausto.fichasalcolea`
@@ -16,9 +16,11 @@ El APK no contiene `datos.enc` ni fichas. El código, los datos y el service wor
 
 ## Compilar
 
-Hace falta el SDK de Android y una keystore que no está en el repositorio. Las contraseñas viven en secretos de GitHub Actions:
+Hace falta el SDK de Android. La keystore no está en claro en el repositorio. Hay una copia cifrada con AES-256-CBC y PBKDF2 en `fichas-release.keystore.enc`. La contraseña de ese archivo no está en el repositorio.
 
-- `ANDROID_KEYSTORE_BASE64`
+Para que el flujo de GitHub Actions pueda firmar, un administrador del repositorio tiene que crear estos secretos:
+
+- `ANDROID_KEYSTORE_BASE64` (la keystore en base64, no el archivo cifrado)
 - `ANDROID_KEYSTORE_PASSWORD`
 - `ANDROID_KEY_ALIAS`
 - `ANDROID_KEY_PASSWORD`
