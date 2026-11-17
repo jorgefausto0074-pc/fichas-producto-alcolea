@@ -39,7 +39,8 @@ const SHELL_FILES = [
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(SHELL);
-    await cache.addAll(SHELL_FILES);
+    // cache: 'reload' evita que una versión nueva se instale con archivos viejos de la caché HTTP.
+    await cache.addAll(SHELL_FILES.map((url) => new Request(url, { cache: 'reload' })));
     const index = await cache.match(new URL('index.html', BASE).href);
     if (index) await cache.put(BASE.href, index.clone());
     await self.skipWaiting();
