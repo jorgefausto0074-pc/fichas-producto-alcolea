@@ -18,21 +18,29 @@ https://jorgefausto0074-pc.github.io/fichas-producto-alcolea/
 8. Los valores se muestran tal cual llegan en el paquete. Si el PDF de origen trae una incoherencia, la ficha la enseña como aviso y no la corrige.
 9. Para instalarla: en Chrome o Edge, **Instalar**; en el iPhone, Compartir → Añadir a pantalla de inicio. Tras la primera carga con red, las fichas siguen disponibles sin cobertura: el service worker guarda la aplicación y el paquete cifrado.
 
-## Cómo actualizar los datos
+## Cómo actualizar las fichas
 
-Los PDF nuevos se procesan en el ordenador del propietario, con el extractor offline. Ese proceso genera solo dos ficheros:
+Jorge lo hace desde la propia aplicación, en el enlace discreto **Actualizar fichas** del pie. No es la contraseña de las fichas.
 
-- `datos.enc`, el paquete cifrado. Dentro del índice puede ir la clave opcional `cambios` (altas, bajas y fichas modificadas respecto a la generación anterior).
-- `formato.json`, con la fecha, la sal, el iv y `sha256_datos_enc`. No lleva fichas.
+1. La primera vez, crea `acceso.enc` en tu ordenador y súbelo a la raíz de `main`. El token no se escribe en el chat ni en el repositorio en claro:
 
-Para publicar:
+```bash
+ACCESO_TOKEN='github_pat_…' ACCESO_CLAVE='la clave de actualización' node tools/crear_acceso.mjs
+```
 
-1. Sustituye esos dos ficheros en la raíz del repositorio, en la rama `main`.
-2. No hace falta tocar el resto de la aplicación ni subir la constante `SHELL` si el código no cambia.
+`ACCESO_TOKEN` es un token fino con Contents (lectura y escritura) y Actions (lectura y escritura), solo de este repositorio. `ACCESO_CLAVE` es una clave distinta de la contraseña de la aplicación. El comando escribe `acceso.enc`. Súbelo con git y no pegues el token en ningún sitio.
 
-La aplicación pide `datos.enc?v=<sha256>`. Al recargar, un equipo que ya tenía la aplicación instalada lee el `formato.json` nuevo, pide el paquete con el hash nuevo y suelta el anterior. La sal y el iv cambian en cada generación: quien tuviera la sesión recordada tendrá que volver a escribir la contraseña.
+2. En la aplicación, entra con la contraseña de siempre. Abre **Actualizar fichas**, escribe la clave de actualización y, si quieres, márcala para recordarla en ese dispositivo. Se guarda una clave no exportable; el token no se muestra.
+3. Elige uno o dos PDF del informe de Access (asépticos, no asépticos, o los dos). El navegador los cifra con la contraseña de la aplicación y los sube como `entrada.enc` a un **borrador** de release llamado `actualizacion-pendiente`. No entran en el historial de `main` y, al ser borrador, no son públicos.
+4. La aplicación lanza el flujo **Actualizar fichas** en modo `revisar`. Tarda unos minutos. Al terminar muestra altas, bajas, modificadas (antes → después), incidencias y avisos.
+5. **Aprobar y publicar** lanza el modo `aplicar`. Solo se commitean `datos.enc` y `formato.json`. Luego se borra el borrador. **Descartar** borra el borrador sin publicar.
+6. Cuando diga Publicado, recarga. La aplicación pide `datos.enc?v=<sha256>` nuevo.
 
-Si `cambios` no viene en el paquete, la pestaña Novedades dice que es la versión inicial. Si cambia el HTML, el CSS o el JavaScript, sube también la constante `SHELL` de `sw.js`.
+Si la clave de actualización es incorrecta, lo dice y no sigue. Si el PDF no es un informe de Alcolea, el flujo termina con un aviso y un enlace a la ejecución. Si las fichas publicadas cambiaron entre la revisión y la aprobación, hay que descartar y revisar otra vez.
+
+Para cambiar el token o la clave de actualización, vuelve a ejecutar el comando de arriba con los valores nuevos, sustituye `acceso.enc` en `main` y, en la aplicación, pulsa **Olvidar la clave de actualización**. La contraseña de las fichas sigue siendo el secreto `PT_PASSWORD`: no va en el repositorio. Si cambia el HTML, el CSS o el JavaScript, sube también la constante `SHELL` de `sw.js`.
+
+El detalle del extractor está en `updater/README_ACTUALIZADOR.md`.
 
 ## Qué hay en el repositorio
 

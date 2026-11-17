@@ -16,3 +16,9 @@ android/.idea/
 *.apk
 *.keystore
 *.jks
+
+# Actualizaciones: los PDF y el trabajo descifrado no se versionan
+*.pdf
+/actualizacion/
+/out/
+updater/.venv/
