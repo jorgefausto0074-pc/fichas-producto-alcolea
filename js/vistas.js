@@ -174,32 +174,55 @@ function filaChips(titulo, clave, opciones, actual) {
   return `<div class="chip-row"><span class="chip-label" id="lab-${esc(clave)}">${esc(titulo)}</span><div class="chip-scroller" role="group" aria-labelledby="lab-${esc(clave)}">${chips.join('')}</div></div>`;
 }
 
+const MARCA = 'img/marca2026/';
+const TAGLINE = 'The agile beverage solutions partner.';
+
+function burbujasLogin(n) {
+  let html = '';
+  for (let i = 0; i < n; i += 1) {
+    // Distribución fija (sin Math.random) para que el render sea estable.
+    const left = (i * 37 + 11) % 100;
+    const size = 8 + ((i * 13) % 26);
+    const delay = (i * 1.7) % 9;
+    const dur = 7 + ((i * 3) % 7);
+    html += `<span class="bubble" style="left:${left}%;width:${size}px;height:${size}px;animation-delay:-${delay.toFixed(1)}s;animation-duration:${dur}s"></span>`;
+  }
+  return `<div class="bubbles" aria-hidden="true">${html}</div>`;
+}
+
+/** Fondo del acceso (imagen Refresco 2026, igual que Inspecciones Calidad v1.5.0). */
+function decoracionLogin() {
+  const botellas = [1, 2, 3, 4]
+    .map((n, i) => `<div class="gate-bottle" style="--i:${i}"><img src="${MARCA}foto-linea-${n}.webp" alt=""></div>`)
+    .join('');
+  return `<div class="gate-decor" aria-hidden="true">
+      <div class="gate-photo"><img src="${MARCA}foto-burbujas.webp" alt=""></div>
+      <img class="gate-circles" src="${MARCA}circulos-azul.svg" alt="">
+      <img class="gate-stripe" src="${MARCA}stripe-r-naranja.svg" alt="">
+      <div class="gate-bottles">${botellas}</div>
+      ${burbujasLogin(18)}
+    </div>`;
+}
+
 export function htmlLogin({ error = '', ocupado = false, fecha = '', destino = '' }) {
   return `<div class="login">
-    <div class="orb orb-a" aria-hidden="true"></div>
-    <div class="orb orb-b" aria-hidden="true"></div>
-    <div class="orb orb-c" aria-hidden="true"></div>
-    <svg class="wave" viewBox="0 0 1440 180" preserveAspectRatio="none" aria-hidden="true">
-      <path fill="#B1DCED" opacity=".45" d="M0,80 C240,140 420,20 720,70 C1020,120 1200,40 1440,90 L1440,180 L0,180 Z"></path>
-      <path fill="#ffffff" d="M0,120 C260,70 480,160 760,120 C1040,80 1220,150 1440,110 L1440,180 L0,180 Z"></path>
-    </svg>
+    ${decoracionLogin()}
     <main class="login-card" id="contenido">
-      <p class="wordmark">refresc<span>o</span></p>
-      <p class="kicker">Iberia · Planta Alcolea · Calidad</p>
+      <img class="login-logo" src="${MARCA}refresco-logo-naranja.png" alt="Refresco">
       <h1>Fichas de producto terminado</h1>
-      <p class="lead">Especificaciones de asépticos y carbonatados. Los datos se descifran en este dispositivo cuando escribes la contraseña.</p>
+      <p class="login-sub">Refresco Iberia · Planta Alcolea</p>
       ${fecha ? `<p class="fecha-datos">Datos del ${esc(fecha)}</p>` : ''}
       ${destino ? `<p class="fecha-datos">Al entrar se abrirá la ficha SAP ${esc(destino)}.</p>` : ''}
       <form id="login-form">
         <label for="clave">Contraseña</label>
-        <input id="clave" name="clave" type="password" autocomplete="current-password" required ${ocupado ? 'disabled' : ''} autofocus>
+        <input id="clave" name="clave" type="password" autocomplete="current-password" placeholder="••••••••" required ${ocupado ? 'disabled' : ''} autofocus>
         <label class="check"><input type="checkbox" name="recordar" ${ocupado ? 'disabled' : ''}> Recordar en este dispositivo</label>
-        <p class="hint">Se guarda una clave criptográfica que el navegador no puede exportar. La contraseña no se almacena.</p>
         <button class="btn btn-primary" type="submit" ${ocupado ? 'disabled aria-busy="true"' : ''}>${ocupado ? 'Abriendo las fichas…' : 'Entrar'}</button>
         <p class="error" role="alert">${esc(error)}</p>
         ${ocupado ? '<p class="hint">En un móvil puede tardar unos segundos.</p>' : ''}
       </form>
-      <p class="login-pie">Jorge Quezada Ortega · Coordinador de Calidad</p>
+      <p class="hint">Los datos se descifran en este dispositivo. La contraseña no se almacena.</p>
+      <p class="tagline">${TAGLINE}</p>
     </main>
   </div>`;
 }

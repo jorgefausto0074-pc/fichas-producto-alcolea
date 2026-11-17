@@ -1,4 +1,4 @@
-const SHELL = 'fichas-shell-v6';
+const SHELL = 'fichas-shell-v7';
 const DATOS = 'fichas-datos-v1';
 const BASE = new URL('./', self.location);
 
@@ -26,6 +26,14 @@ const SHELL_FILES = [
   'icons/icon-maskable-512.png',
   'icons/apple-touch-icon.png',
   'icons/favicon-32.png',
+  'img/marca2026/foto-burbujas.webp',
+  'img/marca2026/refresco-logo-naranja.png',
+  'img/marca2026/circulos-azul.svg',
+  'img/marca2026/stripe-r-naranja.svg',
+  'img/marca2026/foto-linea-1.webp',
+  'img/marca2026/foto-linea-2.webp',
+  'img/marca2026/foto-linea-3.webp',
+  'img/marca2026/foto-linea-4.webp',
 ].map((ruta) => new URL(ruta, BASE).href);
 
 self.addEventListener('install', (event) => {
