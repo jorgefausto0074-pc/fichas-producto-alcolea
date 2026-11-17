@@ -13,6 +13,10 @@ Nothing written to stdout/OUT contains product data in clear text; the decrypted
 (a temporary folder, deleted at the end unless --conservar-trabajo).
 """
 import argparse, contextlib, hashlib, json, os, shutil, sys, tempfile, time
+
+# Las fechas de las fichas (generado, cambios) van en hora de la planta, no en la UTC del runner.
+os.environ["TZ"] = "Europe/Madrid"
+time.tzset()
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
