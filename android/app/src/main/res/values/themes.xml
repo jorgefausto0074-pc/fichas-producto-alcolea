@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Fichas" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:statusBarColor">@color/navy</item>
+        <item name="android:navigationBarColor">@color/navy</item>
+        <item name="android:windowBackground">@color/navy</item>
+        <item name="colorPrimary">@color/navy</item>
+        <item name="colorAccent">@color/orange</item>
+    </style>
+    <style name="Theme.Fichas.Splash" parent="Theme.Fichas">
+        <item name="android:windowBackground">@drawable/splash</item>
+    </style>
+</resources>
