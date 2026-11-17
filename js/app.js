@@ -7,7 +7,7 @@ import { contarValores } from './buscar.js';
 import {
   htmlLogin, htmlShell, htmlInicio, htmlBuscar, htmlResultados, htmlProducto,
   htmlComparar, htmlCodigos, htmlCodigoG, htmlLightbox, htmlDock,
-  htmlNovedades, htmlResultadoEan, htmlEscaner, htmlCompartir,
+  htmlNovedades, htmlResultadoEan, htmlEscaner, htmlCompartir, htmlActualizar,
 } from './vistas.js';
 import { fichasPorEan } from './ean.js';
 import { decodificarCanvas } from './escaner.js';
@@ -16,6 +16,12 @@ import {
   limpiarRecientes, fijarPlanta, aplicarPlantaGuardada, esFavorito,
 } from './preferencias.js';
 import { juzgarMedida, textoJuicio } from './analisis.js';
+import { borrarAccesoEnvuelto, descargarAcceso, desenvolverToken, envolverToken } from './acceso.js';
+import { crearCliente } from './github.js';
+import {
+  aprobar, descartar, informeDeRelease, leerPdfs, leerResultado, mensajeFallo,
+  nuevaSolicitud, sanear, seguir, subirRevision,
+} from './actualizar.js';
 
 aplicarPlantaGuardada();
 const state = {
@@ -43,6 +49,21 @@ const state = {
 };
 
 const urls = new Map();
+let claveAplicacion = '';
+let acceso = null;
+let actGeneracion = 0;
+let pantallaActLista = false;
+const act = {
+  fase: 'clave',
+  error: '',
+  texto: '',
+  runUrl: '',
+  ocupado: false,
+  informe: null,
+  solicitud: '',
+  desde: '',
+};
+const CLAVE_ACT = 'fichas-act-estado';
 let io = null;
 let vistaFirma = '';
 let toastTimer = 0;
@@ -74,6 +95,7 @@ function construirUrl() {
     p.set('vista', 'comparar');
     if (state.comparar.length) p.set('cmp', state.comparar.join(','));
   } else if (r.vista === 'novedades') p.set('vista', 'novedades');
+  else if (r.vista === 'actualizar') p.set('vista', 'actualizar');
   else if (r.vista === 'ean' && r.codigo) p.set('ean', r.codigo);
   else if (r.vista === 'buscar') {
     p.set('vista', 'buscar');
@@ -99,6 +121,7 @@ function leerRuta() {
   if (ean) return { vista: 'ean', codigo: ean };
   const vista = q.get('vista');
   if (vista === 'novedades') return { vista: 'novedades' };
+  if (vista === 'actualizar') return { vista: 'actualizar' };
   if (vista === 'comparar') {
     const cmp = (q.get('cmp') || '').split(',').map((s) => s.trim()).filter(Boolean);
     if (cmp.length) state.comparar = cmp.slice(0, 3);
@@ -336,6 +359,7 @@ function htmlDeVista() {
     return htmlComparar({ productos: lista, relacionados: relacionadosComparar(lista) });
   }
   if (r.vista === 'novedades') return htmlNovedades(state.doc?.cambios ?? null);
+  if (r.vista === 'actualizar') return htmlActualizar(vistaAct());
   if (r.vista === 'ean') {
     const lista = fichasPorEan(productos(), r.codigo);
     return htmlResultadoEan({ codigo: r.codigo, productosLista: lista });
@@ -456,6 +480,7 @@ function titulo() {
   else if (r.vista === 'producto') t = `SAP ${r.sap}`;
   else if (r.vista === 'comparar') t = 'Comparar';
   else if (r.vista === 'novedades') t = 'Novedades';
+  else if (r.vista === 'actualizar') t = 'Actualizar fichas';
   else if (r.vista === 'ean') t = 'Código de barras';
   else if (r.vista === 'codigos') t = 'Códigos G';
   else if (r.vista === 'g') t = r.codigo;
@@ -584,6 +609,7 @@ async function copiar(texto) {
 
 function aplicarPaquete(paquete) {
   state.doc = paquete.doc;
+  if (state.doc && paquete.cambios && state.doc.cambios == null) state.doc.cambios = paquete.cambios;
   state.imagenes = paquete.imagenes;
   state.blob = paquete.blob;
   const idx = indexar(paquete.doc);
@@ -612,7 +638,9 @@ async function entrar(fd) {
     const paquete = await descifrarConClave(key, state.formato, buf);
     if (recordar) await guardarClave(key, { sal_hex: state.formato.sal_hex });
     else await borrarClave().catch(() => {});
+    claveAplicacion = password;
     aplicarPaquete(paquete);
+    if (state.ruta.vista === 'actualizar') prepararPantallaAct();
   } catch (err) {
     marcarOcupado(false);
     const msg = err?.name === 'OperationError'
@@ -648,6 +676,15 @@ function marcarOcupado(on) {
 
 async function salir() {
   await borrarClave().catch(() => {});
+  await borrarAccesoEnvuelto().catch(() => {});
+  claveAplicacion = '';
+  acceso = null;
+  actGeneracion += 1;
+  pantallaActLista = false;
+  act.fase = 'clave';
+  act.informe = null;
+  act.error = '';
+  limpiarAct();
   for (const meta of urls.values()) URL.revokeObjectURL(meta.url);
   urls.clear();
   state.doc = null;
@@ -666,6 +703,251 @@ async function salir() {
   pintarLogin();
 }
 
+function vistaAct() {
+  return {
+    fase: act.fase,
+    error: act.error,
+    texto: act.texto,
+    runUrl: act.runUrl,
+    ocupado: act.ocupado,
+    informe: act.informe,
+    pideClaveApp: !claveAplicacion,
+  };
+}
+
+function guardarAct() {
+  try {
+    sessionStorage.setItem(CLAVE_ACT, JSON.stringify({
+      fase: act.fase, solicitud: act.solicitud, desde: act.desde,
+    }));
+  } catch { /* modo privado */ }
+}
+
+function leerAct() {
+  try { return JSON.parse(sessionStorage.getItem(CLAVE_ACT) || 'null'); } catch { return null; }
+}
+
+function limpiarAct() {
+  try { sessionStorage.removeItem(CLAVE_ACT); } catch { /* modo privado */ }
+}
+
+function pintarAct() {
+  if (state.ruta.vista !== 'actualizar') return;
+  renderVista({ foco: false });
+}
+
+function clienteAct() {
+  return crearCliente({ token: acceso.token, repo: acceso.repo });
+}
+
+async function comprobarClaveApp(password) {
+  const key = await derivarClave(password, state.formato);
+  const buf = await obtenerCifrado(state.formato.sha256_datos_enc);
+  await descifrarConClave(key, state.formato, buf);
+  claveAplicacion = password;
+}
+
+async function prepararPantallaAct() {
+  if (pantallaActLista) return;
+  pantallaActLista = true;
+  try {
+    if (!acceso) {
+      const guardado = await desenvolverToken();
+      if (guardado) acceso = guardado;
+    }
+  } catch { /* sin sesión de actualización */ }
+  if (acceso && act.fase === 'clave') act.fase = 'pdfs';
+  const ses = leerAct();
+  if (acceso && ses?.solicitud && (ses.fase === 'revisando' || ses.fase === 'publicando' || ses.fase === 'subida')) {
+    act.solicitud = ses.solicitud;
+    act.desde = ses.desde || new Date(0).toISOString();
+    act.fase = ses.fase === 'subida' ? 'revisando' : ses.fase;
+    act.texto = act.fase === 'publicando' ? 'Publicando las fichas…' : 'Revisando las fichas.';
+    const gen = ++actGeneracion;
+    pintarAct();
+    vigilar(gen);
+    return;
+  }
+  pintarAct();
+}
+
+async function vigilar(gen) {
+  const modo = act.fase;
+  try {
+    const gh = clienteAct();
+    const run = await seguir(gh, { solicitud: act.solicitud, desde: act.desde, intervalo: 8000, limite: 100 });
+    if (gen !== actGeneracion) return;
+    if (run.status !== 'completed') {
+      act.texto = 'Sigue en curso. Puedes dejar esta pantalla abierta.';
+      guardarAct();
+      pintarAct();
+      return;
+    }
+    if (run.conclusion === 'success') {
+      if (modo === 'publicando') {
+        act.fase = 'publicado';
+        act.error = '';
+        act.runUrl = '';
+        limpiarAct();
+        pintarAct();
+        return;
+      }
+      if (!claveAplicacion) {
+        act.fase = 'clave-app';
+        act.error = '';
+        pintarAct();
+        return;
+      }
+      act.informe = await informeDeRelease(gh, claveAplicacion);
+      act.fase = 'informe';
+      act.error = '';
+      guardarAct();
+      pintarAct();
+      return;
+    }
+    const resultado = await leerResultado(gh).catch(() => null);
+    const msg = mensajeFallo({ resultado, run });
+    act.fase = 'error';
+    act.error = msg.texto;
+    act.runUrl = msg.url;
+    guardarAct();
+    pintarAct();
+  } catch (err) {
+    if (gen !== actGeneracion) return;
+    act.fase = 'error';
+    act.error = sanear(err?.message || 'No se ha podido seguir la ejecución.', acceso?.token);
+    act.runUrl = err?.runUrl || '';
+    guardarAct();
+    pintarAct();
+  }
+}
+
+async function onAcceso(fd) {
+  act.ocupado = true;
+  act.error = '';
+  pintarAct();
+  try {
+    const abierto = await descargarAcceso(String(fd.get('clave') || ''));
+    acceso = { token: abierto.token, repo: abierto.repo };
+    if (fd.get('recordar') != null) await envolverToken(abierto.token, abierto.repo);
+    else await borrarAccesoEnvuelto();
+    act.fase = 'pdfs';
+    act.ocupado = false;
+    guardarAct();
+  } catch (err) {
+    act.ocupado = false;
+    act.error = err?.code === 'clave' || err?.code === 'sin-acceso' || err?.code === 'acceso-formato'
+      ? err.message
+      : sanear(err?.message || 'No se ha podido abrir el acceso.', acceso?.token);
+  }
+  pintarAct();
+}
+
+async function onPdfs(form) {
+  const gen = ++actGeneracion;
+  act.ocupado = true;
+  act.error = '';
+  pintarAct();
+  try {
+    if (!claveAplicacion) {
+      try {
+        await comprobarClaveApp(String(new FormData(form).get('clave-app') || ''));
+      } catch (err) {
+        act.ocupado = false;
+        act.error = err?.name === 'OperationError'
+          ? 'Contraseña de la aplicación incorrecta.'
+          : 'No se ha podido comprobar la contraseña de la aplicación.';
+        pintarAct();
+        return;
+      }
+    }
+    const archivos = await leerPdfs(form.querySelector('#pdfs').files);
+    act.solicitud = nuevaSolicitud();
+    act.desde = new Date().toISOString();
+    act.fase = 'subida';
+    act.texto = 'Cifrando y subiendo los PDF…';
+    act.ocupado = false;
+    guardarAct();
+    pintarAct();
+    const gh = clienteAct();
+    await subirRevision(gh, { password: claveAplicacion, archivos, solicitud: act.solicitud });
+    if (gen !== actGeneracion) return;
+    act.fase = 'revisando';
+    act.texto = 'Revisando las fichas.';
+    guardarAct();
+    pintarAct();
+    await vigilar(gen);
+  } catch (err) {
+    if (gen !== actGeneracion) return;
+    act.ocupado = false;
+    act.fase = 'error';
+    act.error = sanear(err?.message || 'No se han podido enviar los PDF.', acceso?.token);
+    act.runUrl = err?.runUrl || '';
+    guardarAct();
+    pintarAct();
+  }
+}
+
+async function onClaveInforme(fd) {
+  act.ocupado = true;
+  act.error = '';
+  pintarAct();
+  try {
+    await comprobarClaveApp(String(fd.get('clave-app') || ''));
+    act.informe = await informeDeRelease(clienteAct(), claveAplicacion);
+    act.fase = 'informe';
+    act.ocupado = false;
+    act.error = '';
+    guardarAct();
+  } catch (err) {
+    act.ocupado = false;
+    act.error = err?.name === 'OperationError'
+      ? 'Contraseña de la aplicación incorrecta.'
+      : sanear(err?.message || 'No se ha podido abrir el informe.', acceso?.token);
+  }
+  pintarAct();
+}
+
+async function onAprobar() {
+  const gen = ++actGeneracion;
+  act.fase = 'publicando';
+  act.texto = 'Publicando las fichas…';
+  act.error = '';
+  act.solicitud = nuevaSolicitud();
+  act.desde = new Date().toISOString();
+  guardarAct();
+  pintarAct();
+  try {
+    await aprobar(clienteAct(), act.solicitud);
+    await vigilar(gen);
+  } catch (err) {
+    if (gen !== actGeneracion) return;
+    act.fase = 'error';
+    act.error = sanear(err?.message || 'No se ha podido publicar.', acceso?.token);
+    act.runUrl = err?.runUrl || '';
+    guardarAct();
+    pintarAct();
+  }
+}
+
+async function onDescartar() {
+  act.ocupado = true;
+  act.error = '';
+  pintarAct();
+  try {
+    if (acceso) await descartar(clienteAct());
+    act.fase = acceso ? 'pdfs' : 'clave';
+    act.informe = null;
+    act.runUrl = '';
+    limpiarAct();
+  } catch (err) {
+    act.fase = 'error';
+    act.error = sanear(err?.message || 'No se ha podido descartar.', acceso?.token);
+  }
+  act.ocupado = false;
+  pintarAct();
+}
+
 function ir(vista, extra = {}, { replace = false } = {}) {
   if (vista === 'inicio') {
     state.q = '';
@@ -676,6 +958,7 @@ function ir(vista, extra = {}, { replace = false } = {}) {
   state.ruta = { vista, ...extra };
   history[replace ? 'replaceState' : 'pushState'](null, '', construirUrl());
   renderVista();
+  if (vista === 'actualizar') prepararPantallaAct();
 }
 
 function aplicarFiltro(k, v) {
@@ -858,6 +1141,39 @@ function onClick(ev) {
       salir();
       return;
     }
+    if (tipo === 'olvidar-act') {
+      ev.preventDefault();
+      acceso = null;
+      act.fase = 'clave';
+      act.error = '';
+      act.informe = null;
+      borrarAccesoEnvuelto().then(() => pintarAct());
+      return;
+    }
+    if (tipo === 'aprobar-act') {
+      ev.preventDefault();
+      onAprobar();
+      return;
+    }
+    if (tipo === 'descartar-act') {
+      ev.preventDefault();
+      onDescartar();
+      return;
+    }
+    if (tipo === 'reintentar-act') {
+      ev.preventDefault();
+      act.fase = acceso ? 'pdfs' : 'clave';
+      act.error = '';
+      act.runUrl = '';
+      act.informe = null;
+      pintarAct();
+      return;
+    }
+    if (tipo === 'recargar-act') {
+      ev.preventDefault();
+      location.reload();
+      return;
+    }
     if (tipo === 'instalar') {
       ev.preventDefault();
       state.installEvent?.prompt();
@@ -1034,6 +1350,18 @@ function onSubmit(ev) {
     if (!state.ocupado) entrar(new FormData(ev.target));
   }
   if (ev.target.id === 'form-buscar') ev.preventDefault();
+  if (ev.target.id === 'form-acceso') {
+    ev.preventDefault();
+    if (!act.ocupado) onAcceso(new FormData(ev.target));
+  }
+  if (ev.target.id === 'form-pdfs') {
+    ev.preventDefault();
+    if (!act.ocupado) onPdfs(ev.target);
+  }
+  if (ev.target.id === 'form-clave-app') {
+    ev.preventDefault();
+    if (!act.ocupado) onClaveInforme(new FormData(ev.target));
+  }
 }
 
 function onInput(ev) {
@@ -1254,6 +1582,7 @@ async function iniciar() {
     if (!state.listo) return;
     state.ruta = leerRuta();
     renderVista();
+    if (state.ruta.vista === 'actualizar') prepararPantallaAct();
   });
   window.addEventListener('beforeprint', abrirDetalles);
   window.addEventListener('afterprint', cerrarDetalles);
@@ -1290,6 +1619,7 @@ async function iniciar() {
       const buf = await obtenerCifrado(state.formato.sha256_datos_enc);
       const paquete = await descifrarConClave(guardada.key, state.formato, buf);
       aplicarPaquete(paquete);
+      if (state.ruta.vista === 'actualizar') prepararPantallaAct();
       return;
     } catch {
       await borrarClave().catch(() => {});

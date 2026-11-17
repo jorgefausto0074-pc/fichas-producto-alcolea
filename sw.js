@@ -1,4 +1,4 @@
-const SHELL = 'fichas-shell-v4';
+const SHELL = 'fichas-shell-v5';
 const DATOS = 'fichas-datos-v1';
 const BASE = new URL('./', self.location);
 
@@ -16,6 +16,9 @@ const SHELL_FILES = [
   'js/analisis.js',
   'js/preferencias.js',
   'js/escaner.js',
+  'js/acceso.js',
+  'js/github.js',
+  'js/actualizar.js',
   'js/vendor/zxing-ean.js',
   'manifest.webmanifest',
   'icons/icon-192.png',
@@ -55,6 +58,10 @@ self.addEventListener('fetch', (event) => {
 
   if (req.mode === 'navigate') {
     event.respondWith(navegacion(req));
+    return;
+  }
+  if (url.pathname.endsWith('/acceso.enc') || url.pathname.endsWith('acceso.enc')) {
+    event.respondWith(fetch(req));
     return;
   }
   if (url.pathname.endsWith('/formato.json') || url.pathname.endsWith('formato.json')) {

@@ -1,0 +1,158 @@
+name: Actualizar fichas
+run-name: actualizar ${{ inputs.modo }} ${{ inputs.solicitud }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: revisar o aplicar
+        required: true
+        type: choice
+        options:
+          - revisar
+          - aplicar
+      solicitud:
+        description: Identificador de esta petición
+        required: false
+        default: manual
+        type: string
+
+concurrency:
+  group: actualizar-fichas
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pages: write
+
+jobs:
+  actualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Dependencias
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -q -r updater/requirements.txt
+
+      - name: Revisar o aplicar
+        env:
+          PT_PASSWORD: ${{ secrets.PT_PASSWORD }}
+          MODO: ${{ inputs.modo }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p actualizacion/out
+          REL=$(gh api "repos/${REPO}/releases?per_page=100" --jq '[.[] | select(.draft==true and .tag_name=="actualizacion-pendiente")][0].id // empty')
+          if [ -z "${REL}" ]; then
+            echo "No hay un borrador actualizacion-pendiente." >&2
+            exit 1
+          fi
+          bajar() {
+            local name="$1"
+            local id
+            id=$(gh api "repos/${REPO}/releases/${REL}/assets" --jq "[.[] | select(.name==\"${name}\")][0].id // empty")
+            if [ -z "${id}" ]; then
+              echo "Falta ${name}." >&2
+              exit 1
+            fi
+            gh api "repos/${REPO}/releases/assets/${id}" -H "Accept: application/octet-stream" > "actualizacion/${name}"
+          }
+          subir() {
+            local name="$1" file="$2" type="$3" id
+            id=$(gh api "repos/${REPO}/releases/${REL}/assets" --jq "[.[] | select(.name==\"${name}\")][0].id // empty")
+            if [ -n "${id}" ]; then
+              gh api --method DELETE "repos/${REPO}/releases/assets/${id}" >/dev/null
+            fi
+            gh api --method POST -H "Content-Type: ${type}" --input "${file}" \
+              "repos/${REPO}/releases/${REL}/assets?name=${name}" >/dev/null
+          }
+          bajar entrada.enc
+          bajar entrada.json
+          if [ "${MODO}" = "aplicar" ]; then
+            bajar informe.enc
+            bajar informe.json
+          fi
+          set +e
+          if [ "${MODO}" = "revisar" ]; then
+            .venv/bin/python updater/ci_actualizar.py revisar --anterior . \
+              --entrada actualizacion/entrada.enc --entrada-formato actualizacion/entrada.json \
+              --salida actualizacion/out 2>actualizacion/stderr.txt
+          else
+            .venv/bin/python updater/ci_actualizar.py aplicar --anterior . \
+              --entrada actualizacion/entrada.enc --entrada-formato actualizacion/entrada.json \
+              --informe actualizacion/informe.enc --informe-formato actualizacion/informe.json \
+              --salida actualizacion/out 2>actualizacion/stderr.txt
+          fi
+          code=$?
+          set -e
+          CODE="${code}" MODO="${MODO}" python - << 'PY'
+          import json, os
+          code = int(os.environ["CODE"])
+          modo = os.environ["MODO"]
+          stderr = ""
+          path = "actualizacion/stderr.txt"
+          if os.path.exists(path):
+              stderr = open(path, encoding="utf-8", errors="replace").read()
+          if code == 0:
+              codigo = 0
+          elif code == 2:
+              codigo = 2
+          elif "published datos.enc changed" in stderr:
+              codigo = "base"
+          else:
+              codigo = 1
+          json.dump({"ok": code == 0, "codigo": codigo, "modo": modo}, open("actualizacion/resultado.json", "w"), ensure_ascii=False)
+          PY
+          rm -f actualizacion/stderr.txt
+          subir resultado.json actualizacion/resultado.json application/json
+          if [ "${code}" -eq 0 ] && [ "${MODO}" = "revisar" ]; then
+            subir informe.enc actualizacion/out/informe.enc application/octet-stream
+            subir informe.json actualizacion/out/informe.json application/json
+          fi
+          if [ "${code}" -ne 0 ]; then
+            exit "${code}"
+          fi
+          if [ "${MODO}" != "aplicar" ]; then
+            exit 0
+          fi
+          cp actualizacion/out/datos.enc datos.enc
+          cp actualizacion/out/formato.json formato.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- datos.enc formato.json
+          python - << 'PY'
+          import subprocess
+          names = set(subprocess.check_output(["git", "diff", "--cached", "--name-only"], text=True).split())
+          extra = names - {"datos.enc", "formato.json"}
+          if extra:
+              raise SystemExit("ERROR: el commit incluiría archivos que no son el paquete")
+          PY
+          if git diff --cached --quiet; then
+            echo "El paquete no ha cambiado."
+          else
+            git commit -m "Datos: actualización aprobada"
+            git push origin HEAD:main
+          fi
+          pages=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${REPO}/pages/builds" || true)
+          echo "pages_http=${pages}"
+          gh api --method DELETE "repos/${REPO}/releases/${REL}" >/dev/null
+          gh api --method DELETE "repos/${REPO}/git/refs/tags/actualizacion-pendiente" >/dev/null || true

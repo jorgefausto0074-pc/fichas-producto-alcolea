@@ -244,6 +244,7 @@ export function htmlShell({ fecha }) {
       <p>Fichas de producto terminado · Coordinación de Calidad</p>
       <p>Jorge Quezada Ortega · Coordinador de Calidad</p>
       <p>Datos del ${esc(fecha)}. Los valores se muestran tal cual en el PDF de origen.</p>
+      <p><a class="enlace-discreto" href="?vista=actualizar" data-go="actualizar">Actualizar fichas</a></p>
     </footer>
   </div>`;
 }
@@ -729,6 +730,120 @@ export function htmlNovedades(cambios) {
     ${bloque('Altas', cambios.altas || [], false)}
     ${bloque('Bajas', cambios.bajas || [], false)}
     ${bloque('Modificadas', cambios.modificados || [], true)}
+  </section>`;
+}
+
+function bloqueCambios(titulo, items, modificado) {
+  if (!items.length) return `<section class="panel"><h2>${esc(titulo)}</h2><p class="vacio">Ninguna.</p></section>`;
+  return `<section class="panel"><h2>${esc(titulo)}</h2><ul class="novedades">${items.map((item) => {
+    const enlace = item.sap ? `<a href="?sap=${encodeURIComponent(item.sap)}"><strong>SAP ${esc(item.sap)}</strong> ${esc(item.denominacion || '')}</a>` : `<strong>${esc(item.denominacion || '')}</strong>`;
+    const campos = modificado && Array.isArray(item.campos) ? `<ul class="cambios">${item.campos.map((campo) => `<li><span>${esc(campo.etiqueta || campo.ruta || '')}</span><span class="antes">${esc(valorCambio(campo.antes))}</span><span class="despues">${esc(valorCambio(campo.despues))}</span></li>`).join('')}</ul>` : '';
+    return `<li>${enlace}${campos}</li>`;
+  }).join('')}</ul></section>`;
+}
+
+function listaIncidencias(titulo, items) {
+  if (!items?.length) return '';
+  return `<section class="panel"><h2>${esc(titulo)}</h2><ul class="novedades">${items.map((item) => `<li><strong>SAP ${esc(item.sap || '')}</strong> ${esc(item.denominacion || '')}<span class="inc-linea">${esc(item.tipo || '')}${item.campo ? ` · ${esc(item.campo)}` : ''}${item.detalle ? ` · ${esc(item.detalle)}` : ''}</span></li>`).join('')}</ul></section>`;
+}
+
+export function htmlActualizar(m) {
+  const fase = m.fase || 'clave';
+  const runUrl = /^https:\/\/github\.com\//.test(m.runUrl || '') ? m.runUrl : '';
+  const error = m.error ? `<p class="error" role="alert">${esc(m.error)}</p>${runUrl ? `<p><a href="${esc(runUrl)}" target="_blank" rel="noopener">Ver la ejecución</a></p>` : ''}` : '';
+  if (fase === 'clave') {
+    return `<section class="actualizar">
+      <h1>Actualizar fichas</h1>
+      <p class="lead">La clave de actualización no es la contraseña de las fichas. Solo abre el acceso para enviar PDF nuevos.</p>
+      <form id="form-acceso">
+        <label for="clave-act">Clave de actualización</label>
+        <input id="clave-act" name="clave" type="password" autocomplete="current-password" required ${m.ocupado ? 'disabled' : ''} autofocus>
+        <label class="check"><input type="checkbox" name="recordar" ${m.ocupado ? 'disabled' : ''}> Recordar en este dispositivo</label>
+        <p class="hint">Se guarda una clave que el navegador no puede exportar. El token no se muestra ni se escribe en claro.</p>
+        <button class="btn btn-primary" type="submit" ${m.ocupado ? 'disabled aria-busy="true"' : ''}>${m.ocupado ? 'Comprobando…' : 'Continuar'}</button>
+        ${error}
+      </form>
+    </section>`;
+  }
+  if (fase === 'pdfs') {
+    return `<section class="actualizar">
+      <h1>Actualizar fichas</h1>
+      <p class="lead">Elige uno o dos PDF del informe de Access: asépticos, no asépticos, o los dos. Se cifran en este dispositivo y no se suben en claro.</p>
+      <form id="form-pdfs">
+        ${m.pideClaveApp ? `<label for="clave-app">Contraseña de la aplicación</label><input id="clave-app" name="clave-app" type="password" autocomplete="current-password" required><p class="hint">Hace falta para cifrar los PDF. No se guarda.</p>` : ''}
+        <label for="pdfs">PDF</label>
+        <input id="pdfs" name="pdfs" type="file" accept="application/pdf,.pdf" multiple required>
+        <div class="acciones">
+          <button class="btn btn-primary" type="submit" ${m.ocupado ? 'disabled aria-busy="true"' : ''}>Enviar a revisión</button>
+          <button class="btn btn-ghost" type="button" data-act="olvidar-act">Olvidar la clave de actualización</button>
+        </div>
+        ${error}
+      </form>
+    </section>`;
+  }
+  if (fase === 'clave-app') {
+    return `<section class="actualizar">
+      <h1>Abrir el informe</h1>
+      <p class="lead">La revisión ha terminado. Escribe la contraseña de la aplicación para ver las altas, las bajas y los cambios.</p>
+      <form id="form-clave-app">
+        <label for="clave-app">Contraseña de la aplicación</label>
+        <input id="clave-app" name="clave-app" type="password" autocomplete="current-password" required ${m.ocupado ? 'disabled' : ''}>
+        <p class="hint">No se guarda.</p>
+        <button class="btn btn-primary" type="submit" ${m.ocupado ? 'disabled aria-busy="true"' : ''}>Ver el informe</button>
+        ${error}
+      </form>
+    </section>`;
+  }
+  if (fase === 'subida' || fase === 'revisando' || fase === 'publicando') {
+    const pasos = fase === 'publicando'
+      ? [['publicando', 'Publicando'], ['publicado', 'Publicado']]
+      : [['subida', 'Subida'], ['revisando', 'Revisando'], ['informe', 'Informe']];
+    const orden = pasos.map(([id]) => id);
+    const actual = orden.indexOf(fase);
+    return `<section class="actualizar">
+      <h1>Actualizar fichas</h1>
+      <ol class="pasos">${pasos.map(([id, etiqueta], i) => `<li class="${i < actual ? 'hecho' : ''} ${i === actual ? 'actual' : ''}">${esc(etiqueta)}</li>`).join('')}</ol>
+      <p class="lead" role="status">${esc(m.texto || '')}</p>
+      ${fase === 'revisando' ? '<p class="hint">Suele tardar entre 2 y 7 minutos. Puedes dejar esta pantalla abierta.</p>' : ''}
+    </section>`;
+  }
+  if (fase === 'informe') {
+    const cambios = m.informe?.cambios;
+    const doc = m.informe?.doc || {};
+    const resumen = cambios?.resumen || {};
+    const avisos = doc.revision?.avisos || [];
+    return `<section class="actualizar">
+      <h1>Informe de la revisión</h1>
+      <p class="lead">De ${esc(cambios?.fecha_anterior || '—')} a ${esc(cambios?.fecha_actual || '—')}.</p>
+      ${avisos.length ? `<div class="aviso-act" role="note">${avisos.map((a) => `<p>${esc(a)}</p>`).join('')}</div>` : ''}
+      <div class="stats">
+        <div class="stat stat-quiet"><b>${Number(resumen.altas) || 0}</b><span>Altas</span></div>
+        <div class="stat stat-quiet"><b>${Number(resumen.bajas) || 0}</b><span>Bajas</span></div>
+        <div class="stat stat-quiet"><b>${Number(resumen.modificados) || 0}</b><span>Modificadas</span></div>
+      </div>
+      ${bloqueCambios('Altas', cambios?.altas || [], false)}
+      ${bloqueCambios('Bajas', cambios?.bajas || [], false)}
+      ${bloqueCambios('Modificadas', cambios?.modificados || [], true)}
+      ${listaIncidencias('Incidencias nuevas', doc.incidencias_nuevas)}
+      ${listaIncidencias('Incidencias resueltas', doc.incidencias_resueltas)}
+      <div class="acciones">
+        <button type="button" class="btn btn-primary" data-act="aprobar-act" ${m.ocupado ? 'disabled' : ''}>Aprobar y publicar</button>
+        <button type="button" class="btn btn-ghost" data-act="descartar-act" ${m.ocupado ? 'disabled' : ''}>Descartar</button>
+      </div>
+      ${error}
+    </section>`;
+  }
+  if (fase === 'publicado') {
+    return `<section class="actualizar">
+      <h1>Publicado</h1>
+      <p class="lead">Las fichas nuevas ya están en la web. Recarga para descargarlas.</p>
+      <button type="button" class="btn btn-primary" data-act="recargar-act">Recargar las fichas</button>
+    </section>`;
+  }
+  return `<section class="actualizar">
+    <h1>Actualizar fichas</h1>
+    ${error || '<p class="error" role="alert">No se ha podido completar la actualización.</p>'}
+    <button type="button" class="btn btn-primary" data-act="reintentar-act">Volver a empezar</button>
   </section>`;
 }
 

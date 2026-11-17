@@ -506,6 +506,16 @@ body.lb-open { overflow: hidden; }
 .cambios .despues { color: var(--blue); font-weight: 700; }
 .solo-impresion { display: none; }
 
+.enlace-discreto { color: var(--muted); font-size: .85rem; text-decoration: underline; text-underline-offset: 2px; }
+.actualizar { max-width: 760px; }
+.actualizar form { display: grid; gap: .7rem; }
+.pasos { display: flex; gap: .5rem; list-style: none; padding: 0; margin: 0 0 1rem; }
+.pasos li { flex: 1; text-align: center; padding: .55rem .3rem; border-radius: 999px; background: var(--grey); color: var(--navy); font-weight: 700; }
+.pasos li.actual { background: var(--orange); color: var(--navy); }
+.pasos li.hecho { background: var(--navy); color: var(--white); }
+.aviso-act { border-left: 4px solid var(--orange); background: #fff4ef; padding: .7rem .9rem; border-radius: 12px; margin: .8rem 0; }
+.aviso-act p { margin: .2rem 0; }
+.inc-linea { display: block; color: var(--muted); font-weight: 400; }
 html.planta { font-size: 20px; }
 html.planta .btn,
 html.planta .chip,
