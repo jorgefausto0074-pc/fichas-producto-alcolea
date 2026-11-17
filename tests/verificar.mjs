@@ -8,6 +8,9 @@ import { fileURLToPath } from 'url';
 import { abrirPaquete } from '../js/descifrar.js';
 import { filtrar } from '../js/buscar.js';
 import { agruparMarcas, esCodigoG } from '../js/util.js';
+import { fichasPorEan } from '../js/ean.js';
+import { juzgarMedida, textoJuicio } from '../js/analisis.js';
+import { htmlNovedades } from '../js/vistas.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const password = process.env.PT_PASSWORD || '';
@@ -23,9 +26,19 @@ if (!password) {
   process.exit(1);
 }
 
+function archivosJs(dir, base = 'js') {
+  const salida = [];
+  for (const nombre of fs.readdirSync(dir)) {
+    const absoluto = path.join(dir, nombre);
+    const relativo = path.join(base, nombre);
+    if (fs.statSync(absoluto).isDirectory()) salida.push(...archivosJs(absoluto, relativo));
+    else salida.push(relativo);
+  }
+  return salida;
+}
 const fuentes = [
   'index.html', 'css/app.css', 'sw.js', 'manifest.webmanifest', 'README.md', 'formato.json',
-  ...fs.readdirSync(path.join(root, 'js')).map((f) => path.join('js', f)),
+  ...archivosJs(path.join(root, 'js')),
 ];
 for (const rel of fuentes) {
   const texto = fs.readFileSync(path.join(root, rel), 'utf8');
@@ -94,6 +107,30 @@ const g590 = filtrar(productos, { q: 'G001590' });
 ok(g590.length > 1 && g590.some((p) => p.codigo_sap === '1005653'), 'G001590 compartido incluye 1005653');
 ok(filtrar(productos, { q: 'limon' }).some((p) => /lim[oó]n/i.test(p.producto)), 'búsqueda sin tilde');
 ok(filtrar(productos, { grupo: 'carbonatados' }).every((p) => p.grupo_pdf === 'No asépticos'), 'filtro carbonatados');
+
+const conEan = productos.filter((p) => (p.diseno?.etiqueta_ean || '').replace(/\D/g, '').length >= 8);
+const muestraEan = conEan[0];
+const ean13 = muestraEan.diseno.etiqueta_ean.replace(/\D/g, '');
+const porExacto = fichasPorEan(productos, ean13);
+ok(porExacto.some((p) => p.codigo_sap === muestraEan.codigo_sap), 'el EAN de unidad encuentra su ficha');
+ok(fichasPorEan(productos, `0${ean13}`).some((p) => p.codigo_sap === muestraEan.codigo_sap), 'EAN-14 con cero inicial equivale al EAN-13');
+ok(fichasPorEan(productos, '0000000000000').length === 0, 'un EAN desconocido no devuelve fichas');
+const dentro = juzgarMedida({ std: '1,00', min: '0,90', max: '1,10' }, '1.02', []);
+ok(dentro.estado === 'ok' && textoJuicio(dentro).includes('Dentro'), 'análisis dentro de rango con punto decimal');
+const fuera = juzgarMedida({ std: '1,00', min: '0,90', max: '1,10' }, '1,20', []);
+ok(fuera.estado === 'fuera' && textoJuicio(fuera).includes('Fuera'), 'análisis fuera de rango con coma decimal');
+const raro = juzgarMedida({ std: '23,5', min: '24', max: '23' }, '23,5', []);
+ok(raro.estado === 'incoherente' && textoJuicio(raro).includes('incoherente'), 'no juzga un rango invertido');
+ok(htmlNovedades(null).includes('Versión inicial: sin cambios registrados'), 'sin cambios registrados');
+const htmlCambios = htmlNovedades({
+  fecha_anterior: '2026-01-01',
+  fecha_actual: '2026-02-01',
+  resumen: { altas: 1, bajas: 0, modificados: 1 },
+  altas: [{ sap: '0000001', denominacion: 'Ejemplo de prueba' }],
+  bajas: [],
+  modificados: [{ sap: '0000002', denominacion: 'Ejemplo modificado', campos: [{ ruta: 'brix', etiqueta: 'BRIX', antes: '1,0', despues: '1,1' }] }],
+});
+ok(htmlCambios.includes('0000001') && htmlCambios.includes('1,0') && htmlCambios.includes('1,1'), 'novedades muestra antes y después');
 
 let hashesMal = 0;
 for (const [hash, meta] of Object.entries(paquete.imagenes)) {

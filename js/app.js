@@ -7,7 +7,17 @@ import { contarValores } from './buscar.js';
 import {
   htmlLogin, htmlShell, htmlInicio, htmlBuscar, htmlResultados, htmlProducto,
   htmlComparar, htmlCodigos, htmlCodigoG, htmlLightbox, htmlDock,
+  htmlNovedades, htmlResultadoEan, htmlEscaner, htmlCompartir,
 } from './vistas.js';
+import { fichasPorEan } from './ean.js';
+import { decodificarCanvas } from './escaner.js';
+import {
+  favoritos, toggleFavorito, limpiarFavoritos, recientes, anotarReciente,
+  limpiarRecientes, fijarPlanta, aplicarPlantaGuardada, esFavorito,
+} from './preferencias.js';
+import { juzgarMedida, textoJuicio } from './analisis.js';
+
+aplicarPlantaGuardada();
 const state = {
   formato: null,
   doc: null,
@@ -63,7 +73,9 @@ function construirUrl() {
   } else if (r.vista === 'comparar') {
     p.set('vista', 'comparar');
     if (state.comparar.length) p.set('cmp', state.comparar.join(','));
-  } else if (r.vista === 'buscar') {
+  } else if (r.vista === 'novedades') p.set('vista', 'novedades');
+  else if (r.vista === 'ean' && r.codigo) p.set('ean', r.codigo);
+  else if (r.vista === 'buscar') {
     p.set('vista', 'buscar');
     if (state.q) p.set('q', state.q);
     const f = state.filtros;
@@ -83,7 +95,10 @@ function leerRuta() {
   const g = (q.get('g') || '').trim();
   if (sap) return { vista: 'producto', sap };
   if (g) return { vista: 'g', codigo: g };
+  const ean = (q.get('ean') || '').trim();
+  if (ean) return { vista: 'ean', codigo: ean };
   const vista = q.get('vista');
+  if (vista === 'novedades') return { vista: 'novedades' };
   if (vista === 'comparar') {
     const cmp = (q.get('cmp') || '').split(',').map((s) => s.trim()).filter(Boolean);
     if (cmp.length) state.comparar = cmp.slice(0, 3);
@@ -311,12 +326,19 @@ function htmlDeVista() {
       galeria: state.galeriaActual,
       vacios: state.vacios,
       enComparar: state.comparar.includes(p.codigo_sap),
+      favorito: esFavorito(p.codigo_sap),
+      modificada: Boolean(state.doc?.cambios?.modificados?.some((item) => item.sap === p.codigo_sap)),
     });
   }
   if (r.vista === 'comparar') {
     const lista = state.comparar.map((sap) => state.porSap.get(sap)).filter(Boolean);
     state.comparar = lista.map((p) => p.codigo_sap);
     return htmlComparar({ productos: lista, relacionados: relacionadosComparar(lista) });
+  }
+  if (r.vista === 'novedades') return htmlNovedades(state.doc?.cambios ?? null);
+  if (r.vista === 'ean') {
+    const lista = fichasPorEan(productos(), r.codigo);
+    return htmlResultadoEan({ codigo: r.codigo, productosLista: lista });
   }
   if (r.vista === 'codigos') return htmlCodigos({ ...listaCodigos(), q: state.qG });
   if (r.vista === 'g') {
@@ -365,7 +387,7 @@ function datosInicio() {
     if (arr.length > 1) compartidosG += 1;
   }
   noG.sort((a, b) => a.codigo.localeCompare(b.codigo, 'es', { numeric: true }));
-  const recientes = lista.slice().sort((a, b) => (
+  const porFecha = lista.slice().sort((a, b) => (
     ordenFecha(b.fecha) - ordenFecha(a.fecha) || b.codigo_sap.localeCompare(a.codigo_sap)
   )).slice(0, 8);
   return {
@@ -387,8 +409,10 @@ function datosInicio() {
     formatos: contarValores(lista, 'formato'),
     familias: contarValores(lista, 'familia_derivada'),
     marcas: agruparMarcas(lista),
-    recientes,
+    recientes: porFecha,
     fuentes: state.formato?.fuentes || [],
+    favoritos: favoritos().map((sap) => state.porSap.get(sap)).filter(Boolean),
+    abiertas: recientes().map((sap) => state.porSap.get(sap)).filter(Boolean),
   };
 }
 
@@ -431,13 +455,16 @@ function titulo() {
   else if (r.vista === 'buscar') t = state.q ? `Buscar ${state.q}` : 'Búsqueda';
   else if (r.vista === 'producto') t = `SAP ${r.sap}`;
   else if (r.vista === 'comparar') t = 'Comparar';
+  else if (r.vista === 'novedades') t = 'Novedades';
+  else if (r.vista === 'ean') t = 'Código de barras';
   else if (r.vista === 'codigos') t = 'Códigos G';
   else if (r.vista === 'g') t = r.codigo;
   document.title = `${t} · Fichas Alcolea`;
 }
 
 function marcarTabs() {
-  const actual = state.ruta.vista === 'g' ? 'codigos' : (state.ruta.vista === 'producto' ? 'buscar' : state.ruta.vista);
+  const mapa = { g: 'codigos', producto: 'buscar', ean: 'buscar' };
+  const actual = mapa[state.ruta.vista] || state.ruta.vista;
   document.querySelectorAll('.tabbar a[data-go]').forEach((a) => {
     if (a.dataset.go === actual) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
@@ -459,8 +486,16 @@ function renderVista({ foco = true } = {}) {
   cerrarLb();
   const el = document.getElementById('contenido');
   const firma = `${state.ruta.vista}:${state.ruta.sap || ''}:${state.ruta.codigo || ''}`;
+  if (state.ruta.vista === 'producto' && state.ruta.sap && state.ultimaAnotada !== state.ruta.sap) {
+    anotarReciente(state.ruta.sap);
+    state.ultimaAnotada = state.ruta.sap;
+  } else if (state.ruta.vista !== 'producto') {
+    state.ultimaAnotada = '';
+  }
   el.innerHTML = htmlDeVista();
   observarThumbs(el);
+  const planta = document.getElementById('btn-planta');
+  if (planta) planta.setAttribute('aria-pressed', document.documentElement.classList.contains('planta') ? 'true' : 'false');
   marcarTabs();
   titulo();
   actualizarDock();
@@ -492,6 +527,7 @@ function pintarLogin() {
     error: state.errorLogin,
     ocupado: state.ocupado,
     fecha: state.formato ? fechaPaquete(state.formato) : '',
+    destino: state.ruta?.vista === 'producto' ? state.ruta.sap : '',
   });
   document.title = 'Fichas de producto · Alcolea';
 }
@@ -871,6 +907,66 @@ function onClick(ev) {
       window.print();
       return;
     }
+    if (tipo === 'escanear') {
+      ev.preventDefault();
+      abrirEscaner();
+      return;
+    }
+    if (tipo === 'cerrar-escaner') {
+      ev.preventDefault();
+      cerrarEscaner();
+      return;
+    }
+    if (tipo === 'fav') {
+      ev.preventDefault();
+      toggleFavorito(act.dataset.sap);
+      renderVista({ foco: false });
+      return;
+    }
+    if (tipo === 'limpiar-fav') {
+      ev.preventDefault();
+      limpiarFavoritos();
+      renderVista({ foco: false });
+      return;
+    }
+    if (tipo === 'limpiar-recientes') {
+      ev.preventDefault();
+      limpiarRecientes();
+      renderVista({ foco: false });
+      return;
+    }
+    if (tipo === 'planta') {
+      ev.preventDefault();
+      fijarPlanta(!document.documentElement.classList.contains('planta'));
+      act.setAttribute('aria-pressed', document.documentElement.classList.contains('planta') ? 'true' : 'false');
+      return;
+    }
+    if (tipo === 'compartir') {
+      ev.preventDefault();
+      abrirCompartir(act.dataset.sap);
+      return;
+    }
+    if (tipo === 'cerrar-compartir') {
+      ev.preventDefault();
+      document.getElementById('compartir')?.remove();
+      return;
+    }
+    if (tipo === 'compartir-ahora') {
+      ev.preventDefault();
+      compartirAhora(act.dataset.sap);
+      return;
+    }
+    if (tipo === 'copiar-sap') {
+      ev.preventDefault();
+      copiar(`${avisoEnlace()}\n${enlaceSap(act.dataset.sap)}`);
+      toast('Enlace copiado. Quien lo abra necesita la contraseña.');
+      return;
+    }
+    if (tipo === 'copiar-analisis') {
+      ev.preventDefault();
+      copiarAnalisis();
+      return;
+    }
     if (tipo === 'vacios') {
       ev.preventDefault();
       state.vacios = !state.vacios;
@@ -941,6 +1037,10 @@ function onSubmit(ev) {
 }
 
 function onInput(ev) {
+  if (ev.target.classList?.contains('medida-in')) {
+    pintarJuicio(ev.target);
+    return;
+  }
   if (ev.target.id === 'q') onQuery(ev.target.value);
   if (ev.target.id === 'qg') {
     const pos = ev.target.selectionStart;
@@ -983,6 +1083,142 @@ function abrirDetalles() {
 function cerrarDetalles() {
   detallesAntes.forEach((abierto, d) => { d.open = abierto; });
   detallesAntes.clear();
+}
+
+function enlaceSap(sap) {
+  const url = new URL(location.href);
+  url.search = `?sap=${encodeURIComponent(sap)}`;
+  url.hash = '';
+  return url.toString();
+}
+
+function avisoEnlace() {
+  return 'Enlace a una ficha de producto terminado. Hace falta la contraseña de la aplicación para verla.';
+}
+
+function abrirCompartir(sap) {
+  document.getElementById('compartir')?.remove();
+  const capa = document.createElement('div');
+  capa.id = 'compartir';
+  capa.innerHTML = htmlCompartir(sap);
+  document.body.appendChild(capa);
+}
+
+async function compartirAhora(sap) {
+  const url = enlaceSap(sap);
+  const texto = avisoEnlace();
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: `SAP ${sap} · Fichas Alcolea`, text: texto, url });
+      document.getElementById('compartir')?.remove();
+      return;
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+    }
+  }
+  await copiar(`${texto}\n${url}`);
+  toast('Enlace copiado. Quien lo abra necesita la contraseña.');
+}
+
+function pintarJuicio(input) {
+  const fila = {
+    std: input.dataset.std,
+    min: input.dataset.min,
+    max: input.dataset.max,
+  };
+  const incidencias = input.dataset.incoherente === '1' ? [{ tipo: 'rango_incoherente_en_pdf' }] : [];
+  const resultado = juzgarMedida(fila, input.value, incidencias);
+  const caja = input.parentElement?.querySelector('.medida-juicio');
+  if (!caja) return;
+  caja.textContent = textoJuicio(resultado);
+  caja.className = `medida-juicio es-${resultado.estado}`;
+}
+
+function copiarAnalisis() {
+  const lineas = [];
+  document.querySelectorAll('.medida-in').forEach((input) => {
+    if (!input.value.trim()) return;
+    const juicio = input.parentElement?.querySelector('.medida-juicio')?.textContent || '';
+    lineas.push(`${input.dataset.etiqueta || 'Parámetro'}: medido ${input.value}. ${juicio}`.trim());
+  });
+  if (!lineas.length) {
+    toast('No hay valores medidos.');
+    return;
+  }
+  const sap = state.ruta.sap ? `SAP ${state.ruta.sap}` : 'Ficha';
+  copiar(`${sap}\n${lineas.join('\n')}`);
+}
+
+let escaneo = null;
+
+function cerrarEscaner() {
+  if (escaneo) {
+    escaneo.parar = true;
+    clearTimeout(escaneo.timer);
+    escaneo.stream?.getTracks().forEach((pista) => pista.stop());
+    escaneo = null;
+  }
+  document.getElementById('escaner')?.remove();
+}
+
+async function abrirEscaner() {
+  cerrarEscaner();
+  const capa = document.createElement('div');
+  capa.id = 'escaner';
+  capa.innerHTML = htmlEscaner();
+  document.body.appendChild(capa);
+  const video = capa.querySelector('video');
+  const estado = capa.querySelector('.scan-estado');
+  if (!navigator.mediaDevices?.getUserMedia) {
+    estado.textContent = 'Este navegador no da acceso a la cámara.';
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: 'environment' } },
+    });
+    video.srcObject = stream;
+    await video.play();
+    const lienzo = document.createElement('canvas');
+    const ctx = lienzo.getContext('2d', { willReadFrequently: true });
+    escaneo = { stream, parar: false, timer: 0 };
+    const bucle = async () => {
+      if (!escaneo || escaneo.parar) return;
+      if (video.readyState >= 2 && video.videoWidth) {
+        lienzo.width = video.videoWidth;
+        lienzo.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, lienzo.width, lienzo.height);
+        try {
+          const hallado = await decodificarCanvas(lienzo);
+          if (hallado?.texto && escaneo && !escaneo.parar) {
+            const codigo = hallado.texto;
+            cerrarEscaner();
+            aplicarEan(codigo);
+            return;
+          }
+        } catch { /* el siguiente fotograma */ }
+      }
+      if (escaneo && !escaneo.parar) escaneo.timer = setTimeout(bucle, 320);
+    };
+    bucle();
+  } catch (err) {
+    const denegado = err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError' || err?.name === 'SecurityError';
+    estado.textContent = denegado
+      ? 'No se ha permitido usar la cámara. Puedes autorizarla en los ajustes del navegador y volver a intentarlo.'
+      : 'No se ha podido abrir la cámara.';
+  }
+}
+
+function aplicarEan(codigo) {
+  const lista = fichasPorEan(productos(), codigo);
+  if (lista.length === 1) {
+    ir('producto', { sap: lista[0].codigo_sap });
+    return;
+  }
+  state.ruta = { vista: 'ean', codigo };
+  history.pushState(null, '', construirUrl());
+  renderVista();
 }
 
 async function registrarSW() {

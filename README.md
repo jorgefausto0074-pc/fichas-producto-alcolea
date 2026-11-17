@@ -20,14 +20,19 @@ https://jorgefausto0074-pc.github.io/fichas-producto-alcolea/
 
 ## Cómo actualizar los datos
 
-El extractor offline del propietario regenera dos ficheros y nada más hace falta para publicar datos nuevos:
+Los PDF nuevos se procesan en el ordenador del propietario, con el extractor offline. Ese proceso genera solo dos ficheros:
 
-1. Sustituye `datos.enc` y `formato.json` en la raíz de este repositorio.
-2. Publica en `main`.
+- `datos.enc`, el paquete cifrado. Dentro del índice puede ir la clave opcional `cambios` (altas, bajas y fichas modificadas respecto a la generación anterior).
+- `formato.json`, con la fecha, la sal, el iv y `sha256_datos_enc`. No lleva fichas.
 
-No incrustes datos de producto en el código. La aplicación lee `formato.json` (fecha de generación, sal, iv e `sha256_datos_enc`) y pide `datos.enc?v=<sha256>`. Ese sufijo cambia con cada paquete, así que el service worker no se queda con el cifrado anterior. La sal y el iv también cambian en cada generación: quien tuviera la sesión recordada tendrá que volver a escribir la contraseña.
+Para publicar:
 
-Si cambias HTML, CSS o JavaScript, sube también la constante `SHELL` de `sw.js` para que los navegadores suelten la caché de la aplicación. Un cambio solo de `datos.enc` y `formato.json` no necesita ese paso.
+1. Sustituye esos dos ficheros en la raíz del repositorio, en la rama `main`.
+2. No hace falta tocar el resto de la aplicación ni subir la constante `SHELL` si el código no cambia.
+
+La aplicación pide `datos.enc?v=<sha256>`. Al recargar, un equipo que ya tenía la aplicación instalada lee el `formato.json` nuevo, pide el paquete con el hash nuevo y suelta el anterior. La sal y el iv cambian en cada generación: quien tuviera la sesión recordada tendrá que volver a escribir la contraseña.
+
+Si `cambios` no viene en el paquete, la pestaña Novedades dice que es la versión inicial. Si cambia el HTML, el CSS o el JavaScript, sube también la constante `SHELL` de `sw.js`.
 
 ## Qué hay en el repositorio
 
