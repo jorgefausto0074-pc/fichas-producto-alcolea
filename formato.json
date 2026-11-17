@@ -2,8 +2,8 @@
  "formato": "RPTB",
  "version_formato": 1,
  "version_contenedor": 1,
- "generado": "2026-11-17T17:07:07+01:00",
- "datos_generados": "2026-11-17 17:05:45",
+ "generado": "2026-11-17T17:41:15+00:00",
+ "datos_generados": "2026-11-17 17:39:58",
  "fuentes": [
   "261015 Informe Alcolea No Asépticos.pdf",
   "261104 Informe Alcolea Asépticos.pdf"
@@ -22,8 +22,8 @@
   "codificacion_password": "UTF-8"
  },
  "iteraciones": 600000,
- "sal_hex": "fe9d6178d4de8e474180d9f48fd36f70",
- "iv_hex": "b99fde6ab9dd300ef1d3ea50",
+ "sal_hex": "9422d09c51ba52efa77557c6f212eabf",
+ "iv_hex": "6830ac74726c58f98449d879",
  "recuentos": {
   "productos": 322,
   "por_grupo": {
@@ -35,8 +35,8 @@
   "referencias_imagen": 1295,
   "imagenes_unicas": 713
  },
- "bytes_texto_plano": 13580376,
- "bytes_cifrado": 13580392,
- "sha256_texto_plano": "036f9c94fa7b60198c856305914c468d40c6fd458bc521ee21362b80208fcb74",
- "sha256_datos_enc": "80453faca51302ded526a879191a42da530c504c897b68c75b0974dc75fd4cb9"
+ "bytes_texto_plano": 13580377,
+ "bytes_cifrado": 13580393,
+ "sha256_texto_plano": "3a65da188c31ab6504638168b7e7faff7009210af3905c630b477dd48bfd09fc",
+ "sha256_datos_enc": "9513faf1d08880d777bc55ca2b014e9bd8facae11f46b8b5aeac98a9659e496f"
 }
