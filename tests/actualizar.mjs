@@ -10,7 +10,7 @@ import { abrirAcceso, crearSobreAcceso } from '../js/acceso.js';
 import { cifrarEntrada, leerPdfs } from '../js/actualizar.js';
 import { abrirPaquete } from '../js/descifrar.js';
 import {
-  crearCliente, mensajeFallo, reemplazarRelease, sanear,
+  crearCliente, mensajeFallo, reemplazarPendiente, sanear,
 } from '../js/github.js';
 import { htmlActualizar } from '../js/vistas.js';
 
@@ -150,8 +150,12 @@ const fakeFetch = async (url, opciones = {}) => {
     arrayBuffer: async () => new ArrayBuffer(0),
   });
   if (u.includes('/releases?')) return json([]);
-  if (u.endsWith('/releases') && opciones.method === 'POST') return json({ id: 7, tag_name: 'actualizacion-pendiente', draft: true, assets: [] });
-  if (u.includes('/assets?name=')) return json({ id: 8, name: 'x' });
+  if (u.includes('/git/ref/heads/actualizacion-pendiente')) return json({ message: 'Not Found' }, 404);
+  if (u.includes('/git/refs/heads/actualizacion-pendiente') && opciones.method === 'DELETE') return json({ message: 'Reference does not exist' }, 422);
+  if (u.endsWith('/git/blobs')) return json({ sha: `b${llamadas.length}` }, 201);
+  if (u.endsWith('/git/trees')) return json({ sha: 't1' }, 201);
+  if (u.endsWith('/git/commits')) return json({ sha: 'c1' }, 201);
+  if (u.endsWith('/git/refs') && opciones.method === 'POST') return json({ ref: 'refs/heads/actualizacion-pendiente', object: { sha: 'c1' } }, 201);
   if (u.includes('/dispatches')) return json(null, 204);
   if (u.includes('/runs')) {
     return json({ workflow_runs: [{ id: 9, name: 'actualizar revisar aaaaaa', status: 'completed', conclusion: 'failure', event: 'workflow_dispatch', created_at: new Date().toISOString(), html_url: 'https://github.com/ejemplo/fichas/actions/runs/9' }] });
@@ -159,9 +163,17 @@ const fakeFetch = async (url, opciones = {}) => {
   return json({ message: 'no' }, 404);
 };
 const gh = crearCliente({ fetch: fakeFetch, token, repo });
-const release = await reemplazarRelease(gh);
-ok(release.id === 7, 'crea el borrador actualizacion-pendiente');
-ok(llamadas.some((c) => c.method === 'POST' && String(c.url).includes('/releases') && !String(c.body).includes(token)), 'el cuerpo de la release no lleva el token');
+const pendiente = await reemplazarPendiente(gh, [
+  { nombre: 'entrada.enc', bytes: entrada.enc },
+  { nombre: 'entrada.json', bytes: new TextEncoder().encode(JSON.stringify(entrada.formato)) },
+]);
+ok(pendiente.sha === 'c1', 'crea la rama actualizacion-pendiente');
+ok(llamadas.every((c) => !String(c.url).includes('uploads.github.com')), 'no usa uploads.github.com (sin CORS)');
+const commitBody = JSON.parse(llamadas.find((c) => String(c.url).endsWith('/git/commits')).body);
+ok(Array.isArray(commitBody.parents) && commitBody.parents.length === 0, 'el commit pendiente no cuelga de main');
+const refBody = JSON.parse(llamadas.find((c) => String(c.url).endsWith('/git/refs')).body);
+ok(refBody.ref === 'refs/heads/actualizacion-pendiente', 'la rama es actualizacion-pendiente');
+ok(llamadas.every((c) => !String(c.body || '').includes(token)), 'ningún cuerpo lleva el token');
 ok(llamadas.every((c) => !c.auth || c.auth === `Bearer ${token}`), 'el token solo va en Authorization');
 await gh.dispatch('revisar', 'aaaaaa');
 ok(llamadas.some((c) => String(c.url).includes('/dispatches') && String(c.body).includes('"modo":"revisar"')), 'dispara revisar');
@@ -171,7 +183,8 @@ const workflow = readFileSync(path.join(root, '.github/workflows/actualizar-fich
 ok(!workflow.includes('--conservar-trabajo'), 'el flujo no conserva el trabajo descifrado');
 ok(!workflow.includes('echo "$PT_PASSWORD"') && !workflow.includes('echo ${PT_PASSWORD}'), 'el flujo no imprime la contraseña');
 ok(workflow.includes('datos.enc formato.json') || workflow.includes('datos.enc') && workflow.includes('formato.json'), 'el flujo publica el paquete');
-ok(workflow.includes('actualizacion-pendiente'), 'el flujo usa el borrador');
+ok(workflow.includes('actualizacion-pendiente'), 'el flujo usa la rama pendiente');
+ok(!workflow.includes('/releases'), 'el flujo ya no usa releases');
 
 if (fallos.length) {
   console.error('FALLOS');

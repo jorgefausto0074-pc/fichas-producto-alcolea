@@ -56,30 +56,34 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          # La actualización pendiente vive en la rama actualizacion-pendiente (commit sin padres
+          # con los ficheros cifrados). El navegador la crea por api.github.com.
+          PEND=actualizacion-pendiente
+          DIRP="${RUNNER_TEMP}/pendiente"
           mkdir -p actualizacion/out
-          REL=$(gh api "repos/${REPO}/releases?per_page=100" --jq '[.[] | select(.draft==true and .tag_name=="actualizacion-pendiente")][0].id // empty')
-          if [ -z "${REL}" ]; then
-            echo "No hay un borrador actualizacion-pendiente." >&2
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git fetch -q --depth 1 origin "refs/heads/${PEND}"; then
+            echo "No hay una actualización pendiente (rama ${PEND})." >&2
             exit 1
           fi
+          git worktree add -q --detach "${DIRP}" FETCH_HEAD
           bajar() {
-            local name="$1"
-            local id
-            id=$(gh api "repos/${REPO}/releases/${REL}/assets" --jq "[.[] | select(.name==\"${name}\")][0].id // empty")
-            if [ -z "${id}" ]; then
-              echo "Falta ${name}." >&2
+            if [ ! -f "${DIRP}/$1" ]; then
+              echo "Falta $1." >&2
               exit 1
             fi
-            gh api "repos/${REPO}/releases/assets/${id}" -H "Accept: application/octet-stream" > "actualizacion/${name}"
+            cp "${DIRP}/$1" "actualizacion/$1"
           }
           subir() {
-            local name="$1" file="$2" type="$3" id
-            id=$(gh api "repos/${REPO}/releases/${REL}/assets" --jq "[.[] | select(.name==\"${name}\")][0].id // empty")
-            if [ -n "${id}" ]; then
-              gh api --method DELETE "repos/${REPO}/releases/assets/${id}" >/dev/null
+            cp "$2" "${DIRP}/$1"
+          }
+          guardar_pendiente() {
+            git -C "${DIRP}" add -A
+            if ! git -C "${DIRP}" diff --cached --quiet; then
+              git -C "${DIRP}" commit -q -m "Actualización pendiente: ${MODO}"
+              git -C "${DIRP}" push -q origin "HEAD:refs/heads/${PEND}"
             fi
-            gh api --method POST -H "Content-Type: ${type}" --input "${file}" \
-              "repos/${REPO}/releases/${REL}/assets?name=${name}" >/dev/null
           }
           bajar entrada.enc
           bajar entrada.json
@@ -119,11 +123,12 @@ jobs:
           json.dump({"ok": code == 0, "codigo": codigo, "modo": modo}, open("actualizacion/resultado.json", "w"), ensure_ascii=False)
           PY
           rm -f actualizacion/stderr.txt
-          subir resultado.json actualizacion/resultado.json application/json
+          subir resultado.json actualizacion/resultado.json
           if [ "${code}" -eq 0 ] && [ "${MODO}" = "revisar" ]; then
-            subir informe.enc actualizacion/out/informe.enc application/octet-stream
-            subir informe.json actualizacion/out/informe.json application/json
+            subir informe.enc actualizacion/out/informe.enc
+            subir informe.json actualizacion/out/informe.json
           fi
+          guardar_pendiente
           if [ "${code}" -ne 0 ]; then
             exit "${code}"
           fi
@@ -132,8 +137,6 @@ jobs:
           fi
           cp actualizacion/out/datos.enc datos.enc
           cp actualizacion/out/formato.json formato.json
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- datos.enc formato.json
           python - << 'PY'
           import subprocess
@@ -154,5 +157,5 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${REPO}/pages/builds" || true)
           echo "pages_http=${pages}"
-          gh api --method DELETE "repos/${REPO}/releases/${REL}" >/dev/null
-          gh api --method DELETE "repos/${REPO}/git/refs/tags/actualizacion-pendiente" >/dev/null || true
+          git worktree remove --force "${DIRP}" || true
+          git push -q origin --delete "${PEND}"

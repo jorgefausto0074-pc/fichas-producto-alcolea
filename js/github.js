@@ -1,7 +1,9 @@
 // Cliente mínimo de la API de GitHub. El token solo viaja en Authorization.
 
+import { bytesABase64 } from './descifrar.js';
+
 const API = 'https://api.github.com';
-const RELEASE = 'actualizacion-pendiente';
+export const PENDIENTE = 'actualizacion-pendiente';
 export const WORKFLOW = 'actualizar-fichas.yml';
 
 export function sanear(texto, secreto) {
@@ -16,8 +18,9 @@ export function crearCliente({ fetch: fetchImpl = globalThis.fetch, token, repo 
   async function pedir(url, { method = 'GET', body, headers = {}, binario = false } = {}) {
     const res = await fetchImpl(url, {
       method,
+      cache: 'no-store',
       headers: {
-        Accept: binario ? 'application/octet-stream' : 'application/vnd.github+json',
+        Accept: 'application/vnd.github+json',
         Authorization: `Bearer ${token}`,
         'X-GitHub-Api-Version': '2022-11-28',
         ...headers,
@@ -36,43 +39,70 @@ export function crearCliente({ fetch: fetchImpl = globalThis.fetch, token, repo 
     return res.json();
   }
 
+  async function pedirOpcional(url, opciones) {
+    try {
+      return await pedir(url, opciones);
+    } catch (err) {
+      if (err.status === 404 || err.status === 422) return null;
+      throw err;
+    }
+  }
+
   return {
     async releases() {
       return pedir(`${API}/repos/${repo}/releases?per_page=100`);
     },
+    // Borradores de release de la versión anterior del flujo. Solo se usan para limpiar.
     async releasePendiente() {
       const lista = await this.releases();
-      return (lista || []).find((r) => r.draft && (r.tag_name === RELEASE || r.name === RELEASE)) || null;
+      return (lista || []).find((r) => r.draft && (r.tag_name === PENDIENTE || r.name === PENDIENTE)) || null;
     },
     async borrarRelease(id) {
       await pedir(`${API}/repos/${repo}/releases/${id}`, { method: 'DELETE' });
     },
-    async crearRelease() {
-      return pedir(`${API}/repos/${repo}/releases`, {
+    // La actualización pendiente vive en la rama actualizacion-pendiente (un commit sin padres,
+    // solo con los ficheros cifrados). uploads.github.com no admite CORS; api.github.com sí.
+    async pendiente() {
+      const ref = await pedirOpcional(`${API}/repos/${repo}/git/ref/heads/${PENDIENTE}`);
+      return ref?.object?.sha ? { sha: ref.object.sha } : null;
+    },
+    async borrarPendiente() {
+      await pedirOpcional(`${API}/repos/${repo}/git/refs/heads/${PENDIENTE}`, { method: 'DELETE' });
+      const vieja = await this.releasePendiente().catch(() => null);
+      if (vieja) await this.borrarRelease(vieja.id);
+    },
+    async crearPendiente(archivos) {
+      const tree = [];
+      for (const { nombre, bytes } of archivos) {
+        const blob = await pedir(`${API}/repos/${repo}/git/blobs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: bytesABase64(bytes), encoding: 'base64' }),
+        });
+        tree.push({ path: nombre, mode: '100644', type: 'blob', sha: blob.sha });
+      }
+      const arbol = await pedir(`${API}/repos/${repo}/git/trees`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tag_name: RELEASE,
-          name: RELEASE,
-          draft: true,
-          prerelease: true,
-          make_latest: 'false',
-          body: 'Borrador de actualización. Los PDF van cifrados. Se borra al publicar o al descartar.',
-        }),
+        body: JSON.stringify({ tree }),
       });
-    },
-    async subir(releaseId, nombre, bytes, contentType) {
-      const url = `https://uploads.github.com/repos/${repo}/releases/${releaseId}/assets?name=${encodeURIComponent(nombre)}`;
-      return pedir(url, {
+      const commit = await pedir(`${API}/repos/${repo}/git/commits`, {
         method: 'POST',
-        headers: { 'Content-Type': contentType },
-        body: bytes,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'Actualización pendiente (PDF cifrados)', tree: arbol.sha, parents: [] }),
       });
+      await pedir(`${API}/repos/${repo}/git/refs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ref: `refs/heads/${PENDIENTE}`, sha: commit.sha }),
+      });
+      return { sha: commit.sha };
     },
-    async bajar(release, nombre) {
-      const asset = (release.assets || []).find((a) => a.name === nombre);
-      if (!asset) throw Object.assign(new Error(`No está ${nombre}.`), { code: 'sin-asset' });
-      return pedir(asset.url, { binario: true });
+    async bajar(pendiente, nombre) {
+      const url = `${API}/repos/${repo}/contents/${encodeURIComponent(nombre)}?ref=${pendiente.sha}`;
+      const bytes = await pedirOpcional(url, { binario: true, headers: { Accept: 'application/vnd.github.raw' } });
+      if (!bytes) throw Object.assign(new Error(`No está ${nombre}.`), { code: 'sin-asset' });
+      return bytes;
     },
     async dispatch(modo, solicitud) {
       await pedir(`${API}/repos/${repo}/actions/workflows/${WORKFLOW}/dispatches`, {
@@ -91,14 +121,13 @@ export function crearCliente({ fetch: fetchImpl = globalThis.fetch, token, repo 
   };
 }
 
-export async function reemplazarRelease(gh) {
+export async function reemplazarPendiente(gh, archivos) {
   const enCurso = await gh.runEnCurso();
   if (enCurso) {
     throw Object.assign(new Error('Ya hay una actualización en curso.'), { code: 'en-curso', runUrl: enCurso.html_url });
   }
-  const previa = await gh.releasePendiente();
-  if (previa) await gh.borrarRelease(previa.id);
-  return gh.crearRelease();
+  await gh.borrarPendiente();
+  return gh.crearPendiente(archivos);
 }
 
 export function nuevaSolicitud() {

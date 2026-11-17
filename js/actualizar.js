@@ -1,8 +1,8 @@
-// Cifra los PDF, los sube a un borrador y espera el informe. No registra el token ni los PDF.
+// Cifra los PDF, los sube a la rama actualizacion-pendiente y espera el informe. No registra el token ni los PDF.
 
 import { abrirPaquete, empaquetarIndice, sha256Hex } from './descifrar.js';
 import {
-  esperarRun, mensajeFallo, nuevaSolicitud, reemplazarRelease, sanear,
+  esperarRun, mensajeFallo, nuevaSolicitud, reemplazarPendiente, sanear,
 } from './github.js';
 
 export { mensajeFallo, nuevaSolicitud, sanear };
@@ -44,25 +44,26 @@ export async function cifrarEntrada(password, archivos) {
 
 export async function subirRevision(gh, { password, archivos, solicitud }) {
   const { enc, formato } = await cifrarEntrada(password, archivos);
-  const release = await reemplazarRelease(gh);
-  await gh.subir(release.id, 'entrada.enc', enc, 'application/octet-stream');
   const json = new TextEncoder().encode(JSON.stringify(formato));
-  await gh.subir(release.id, 'entrada.json', json, 'application/json');
+  const pendiente = await reemplazarPendiente(gh, [
+    { nombre: 'entrada.enc', bytes: enc },
+    { nombre: 'entrada.json', bytes: json },
+  ]);
   await gh.dispatch('revisar', solicitud);
-  return release;
+  return pendiente;
 }
 
 export async function informeDeRelease(gh, password) {
-  const release = await gh.releasePendiente();
-  if (!release) throw new Error('No está la actualización pendiente.');
+  const pendiente = await gh.pendiente();
+  if (!pendiente) throw new Error('No está la actualización pendiente.');
   let resultado = null;
   try {
-    resultado = JSON.parse(new TextDecoder().decode(await gh.bajar(release, 'resultado.json')));
+    resultado = JSON.parse(new TextDecoder().decode(await gh.bajar(pendiente, 'resultado.json')));
   } catch (err) {
     if (err?.code !== 'sin-asset') throw err;
   }
-  const enc = await gh.bajar(release, 'informe.enc');
-  const formato = JSON.parse(new TextDecoder().decode(await gh.bajar(release, 'informe.json')));
+  const enc = await gh.bajar(pendiente, 'informe.enc');
+  const formato = JSON.parse(new TextDecoder().decode(await gh.bajar(pendiente, 'informe.json')));
   const paquete = await abrirPaquete(password, formato, enc);
   if (paquete.doc?.tipo !== 'pendiente' && paquete.indice?.tipo !== 'pendiente') {
     throw new Error('El informe no es válido.');
@@ -71,7 +72,7 @@ export async function informeDeRelease(gh, password) {
     cambios: paquete.cambios,
     doc: paquete.doc,
     resultado,
-    release,
+    pendiente,
   };
 }
 
@@ -80,10 +81,10 @@ export async function seguir(gh, { solicitud, desde, esperar, intervalo, limite 
 }
 
 export async function leerResultado(gh) {
-  const release = await gh.releasePendiente();
-  if (!release) return null;
+  const pendiente = await gh.pendiente();
+  if (!pendiente) return null;
   try {
-    return JSON.parse(new TextDecoder().decode(await gh.bajar(release, 'resultado.json')));
+    return JSON.parse(new TextDecoder().decode(await gh.bajar(pendiente, 'resultado.json')));
   } catch (err) {
     if (err?.code === 'sin-asset') return null;
     throw err;
@@ -91,8 +92,7 @@ export async function leerResultado(gh) {
 }
 
 export async function descartar(gh) {
-  const release = await gh.releasePendiente();
-  if (release) await gh.borrarRelease(release.id);
+  await gh.borrarPendiente();
 }
 
 export async function aprobar(gh, solicitud) {
