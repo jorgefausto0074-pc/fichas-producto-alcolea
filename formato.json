@@ -1,0 +1,42 @@
+{
+ "formato": "RPTB",
+ "version_formato": 1,
+ "version_contenedor": 1,
+ "generado": "2026-11-17T13:37:59+01:00",
+ "datos_generados": "2026-11-17 12:45:22",
+ "fuentes": [
+  "261015 Informe Alcolea No Asépticos.pdf",
+  "261104 Informe Alcolea Asépticos.pdf"
+ ],
+ "cifrado": {
+  "algoritmo": "AES-256-GCM",
+  "iv_bytes": 12,
+  "etiqueta_bytes": 16,
+  "etiqueta_al_final": true,
+  "aad": null
+ },
+ "kdf": {
+  "algoritmo": "PBKDF2",
+  "hash": "SHA-256",
+  "longitud_clave_bytes": 32,
+  "codificacion_password": "UTF-8"
+ },
+ "iteraciones": 600000,
+ "sal_hex": "a85839df3cd8fd8c783bbbf34d469c89",
+ "iv_hex": "d340329424c2c90edc075e84",
+ "recuentos": {
+  "productos": 322,
+  "por_grupo": {
+   "No asépticos": 77,
+   "Asépticos": 245
+  },
+  "con_gas": 77,
+  "sin_gas": 245,
+  "referencias_imagen": 1295,
+  "imagenes_unicas": 713
+ },
+ "bytes_texto_plano": 13580244,
+ "bytes_cifrado": 13580260,
+ "sha256_texto_plano": "f33ca692aead452987dfa63b72fd12930dd601162723bad91ca9fd500ef57686",
+ "sha256_datos_enc": "cdeabe4f4fcc94923ed037d5720a2ae5a5fa89579cc5997f146411e27e77d8d5"
+}

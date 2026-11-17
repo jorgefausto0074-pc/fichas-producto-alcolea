@@ -1,0 +1,8 @@
+app-data-cifrado.zip
+ESQUEMA.md
+LEEME.md
+descifrar-referencia.mjs
+ref_*.png
+node_modules/
+.DS_Store
+*.log
