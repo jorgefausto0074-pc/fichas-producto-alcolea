@@ -13,10 +13,11 @@ https://jorgefausto0074-pc.github.io/fichas-producto-alcolea/
 3. Si marcas **Recordar en este dispositivo**, el navegador guarda una clave criptográfica no exportable en IndexedDB. No se guarda la contraseña. **Salir** borra esa clave.
 4. Busca por código SAP, código G, denominación, marca, EAN o texto libre. Las tildes no importan y vale una coincidencia parcial.
 5. Un enlace `?sap=XXXXXXXX` o `?g=G00XXXX` abre esa ficha o ese código de mezcla en cuanto la sesión está abierta.
-6. Los filtros de grupo (asépticos / carbonatados), formato, familia y marca se combinan con la búsqueda.
-7. En la ficha puedes copiar códigos, ampliar los dibujos, imprimir o guardar PDF, y marcar hasta tres productos para compararlos.
-8. Los valores se muestran tal cual llegan en el paquete. Si el PDF de origen trae una incoherencia, la ficha la enseña como aviso y no la corrige.
-9. Para instalarla: en Chrome o Edge, **Instalar**; en el iPhone, Compartir → Añadir a pantalla de inicio. Tras la primera carga con red, las fichas siguen disponibles sin cobertura: el service worker guarda la aplicación y el paquete cifrado.
+6. **Materiales auxiliares:** escribe en la barra un código de tapón (SAP), etiqueta, bandeja o retráctil (versión), separador, asa o etiquetas de caja y palet (EAN). Desde 3 dígitos aparecen sugerencias con el tipo y el número de productos; el código exacto muestra los productos que lo llevan, agrupados por tipo de material y por marca, con el dibujo de la ficha y **Exportar a Excel** (.xlsx). `?mat=<código>` abre ese resultado y la pestaña **Materiales** lista los códigos que comparten 2 o más productos. El índice se calcula en el dispositivo con los datos ya descifrados.
+7. Los filtros de grupo (asépticos / carbonatados), formato, familia y marca se combinan con la búsqueda.
+8. En la ficha puedes copiar códigos, ampliar los dibujos, imprimir o guardar PDF, y marcar hasta tres productos para compararlos.
+9. Los valores se muestran tal cual llegan en el paquete. Si el PDF de origen trae una incoherencia, la ficha la enseña como aviso y no la corrige.
+10. Para instalarla: en Chrome o Edge, **Instalar**; en el iPhone, Compartir → Añadir a pantalla de inicio. Tras la primera carga con red, las fichas siguen disponibles sin cobertura: el service worker guarda la aplicación y el paquete cifrado.
 
 ## Cómo actualizar las fichas
 
@@ -50,6 +51,8 @@ El detalle del extractor está en `updater/README_ACTUALIZADOR.md`.
 | `datos.enc` | Paquete cifrado (AES-256-GCM). Sin la contraseña no se lee |
 | `formato.json` | Parámetros públicos del cifrado, fecha y recuentos. No lleva fichas |
 | `js/descifrar.js` | Descifrado en el navegador con WebCrypto |
+| `js/materiales.js`, `js/excel.js` | Índice de materiales auxiliares y libro .xlsx |
+| `js/vendor/exceljs.min.js` | ExcelJS 4.4.0 (MIT) empaquetado aquí, sin CDN; ver `js/vendor/exceljs.PATCH.txt` |
 
 No se versionan el ZIP de origen, el esquema con ejemplos, las páginas de referencia ni ningún texto plano de producto.
 
@@ -67,6 +70,7 @@ Para comprobar el descifrado sin abrir el navegador (la contraseña por variable
 
 ```bash
 PT_PASSWORD='…' node tests/verificar.mjs
+PT_PASSWORD='…' node tests/materiales.mjs
 ```
 
 Si tienes a mano el `ESQUEMA.md` de la generación, fuera del repositorio:

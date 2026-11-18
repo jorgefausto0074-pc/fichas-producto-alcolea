@@ -1,0 +1,5 @@
+exceljs.min.js = node_modules/exceljs/dist/exceljs.min.js de exceljs 4.4.0 (npm), MIT (exceljs.LICENSE.txt).
+Único cambio: FontXform.render escribe los hijos de <font> en el orden del esquema CT_Font
+(b, i, strike, condense, extend, outline, shadow, u, vertAlign, sz, color, name, family, charset, scheme).
+Sin el parche, el Open XML SDK marca styles.xml con «unexpected child element sz».
+Los <rPr> de texto enriquecido no cambian (la app no los usa).

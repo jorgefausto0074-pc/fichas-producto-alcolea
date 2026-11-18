@@ -245,9 +245,9 @@ export function htmlShell({ fecha }) {
         </div>
       </div>
       <form class="buscador" id="form-buscar" role="search">
-        <label class="sr" for="q">Buscar por SAP, código G, denominación, marca o EAN</label>
+        <label class="sr" for="q">Buscar por SAP, código G, denominación, marca, EAN o código de material auxiliar</label>
         <span class="buscador-ico" aria-hidden="true">${icono('search')}</span>
-        <input id="q" type="search" enterkeyhint="search" autocomplete="off" spellcheck="false" placeholder="SAP, código G, denominación, marca o EAN" aria-describedby="atajo-q">
+        <input id="q" type="search" enterkeyhint="search" autocomplete="off" spellcheck="false" placeholder="SAP, código G, marca, EAN o material (tapón, etiqueta…)" aria-describedby="atajo-q" role="combobox" aria-autocomplete="list" aria-controls="q-sug" aria-expanded="false">
         <button type="button" class="btn-icon btn-scan" data-act="escanear" aria-label="Escanear código de barras">${icono('camera')}</button>
         <button type="button" class="btn-icon" data-act="limpiar-q" aria-label="Borrar búsqueda">${icono('close')}</button>
       </form>
@@ -257,6 +257,7 @@ export function htmlShell({ fecha }) {
         <a data-go="buscar" href="?vista=buscar">${icono('search')}<span>Buscar</span></a>
         <a data-go="novedades" href="?vista=novedades">${icono('spark')}<span>Novedades</span></a>
         <a data-go="codigos" href="?vista=codigos-g">${icono('layers')}<span>Códigos</span></a>
+        <a data-go="materiales" href="?vista=materiales">${icono('box')}<span>Materiales</span></a>
         <a data-go="comparar" href="?vista=comparar">${icono('compare')}<span>Comparar</span></a>
       </nav>
     </header>
@@ -368,8 +369,9 @@ export function htmlBuscar(ctx) {
   </section>`;
 }
 
-export function htmlResultados({ resultados, total, limite, avisoMezcla, q }) {
+export function htmlResultados({ resultados, total, limite, avisoMezcla, q, bloqueMaterial = '', hayMaterial = false, bloqueParcial = '' }) {
   const visibles = resultados.slice(0, limite);
+  if ((bloqueMaterial || bloqueParcial) && total === 0) return `${bloqueMaterial}${bloqueParcial}`;
   const aviso = avisoMezcla ? `<a class="aviso-g" href="?g=${encodeURIComponent(avisoMezcla.codigo)}">${icono('layers')} <span><strong>${esc(avisoMezcla.codigo)}</strong> · ${avisoMezcla.n} ficha${avisoMezcla.n === 1 ? '' : 's'}. Ver el jarabe y todos los SAP.</span></a>` : '';
   const vacio = total === 0
     ? `<div class="vacio-grande"><h2>Ninguna ficha coincide</h2><p>Prueba con el código SAP, el código G, la marca, el EAN o parte de la denominación. Las tildes no importan.</p></div>`
@@ -380,7 +382,10 @@ export function htmlResultados({ resultados, total, limite, avisoMezcla, q }) {
   const intro = q
     ? ''
     : '<p class="nota">Sin texto de búsqueda: estás viendo el catálogo con los filtros activos.</p>';
-  return `${aviso}${intro}<p class="cuenta" aria-live="polite">${total} ficha${total === 1 ? '' : 's'}</p>${vacio}<div class="cards">${visibles.map(htmlTarjeta).join('')}</div>${mas}`;
+  const cuenta = hayMaterial
+    ? `<h2 class="cuenta-h">Otras fichas que coinciden con «${esc(q)}»</h2><p class="cuenta" aria-live="polite">${total} ficha${total === 1 ? '' : 's'}</p>`
+    : `<p class="cuenta" aria-live="polite">${total} ficha${total === 1 ? '' : 's'}</p>`;
+  return `${bloqueMaterial}${aviso}${intro}${cuenta}${vacio}<div class="cards">${visibles.map(htmlTarjeta).join('')}</div>${mas}${bloqueParcial}`;
 }
 
 function htmlPalet(p) {
@@ -934,3 +939,119 @@ export function htmlDock(productos) {
 }
 
 export { fechaPaquete };
+
+/* ---------- Materiales auxiliares ---------- */
+
+const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+
+function htmlFotoMaterial(t) {
+  if (!t.foto) {
+    return `<div class="mat-foto mat-sin-foto"><span aria-hidden="true">${icono('image')}</span><p>${esc(t.sinFoto)}</p></div>`;
+  }
+  const [prin, ...resto] = t.foto.fotos;
+  const pie = (f) => `${f.productos.length === t.n ? 'La misma en las' : 'En'} ${plural(f.productos.length, 'ficha', 'fichas')}${f.productos.length === t.n ? '' : ` de ${t.n}`}: SAP ${f.productos.slice(0, 4).map((p) => esc(p.codigo_sap)).join(', ')}${f.productos.length > 4 ? '…' : ''}`;
+  const otras = resto.length
+    ? `<p class="nota">Las fichas traen ${t.foto.fotos.length} dibujos distintos de esta casilla. Pulsa uno para ampliarlo.</p>
+       <div class="mat-fotos">${resto.map((f) => `<button type="button" class="mat-mini" data-act="lb" data-i="${f.i}" aria-label="Ampliar dibujo de SAP ${esc(f.productos[0].codigo_sap)}">
+         <img src="${esc(f.url)}" alt="" width="${Number(f.ancho) || ''}" height="${Number(f.alto) || ''}" data-hash="${esc(f.hash)}"><span>${pie(f)}</span></button>`).join('')}</div>`
+    : '';
+  const sinDibujo = t.foto.sinDibujo ? `<p class="nota">${plural(t.foto.sinDibujo, 'ficha no trae', 'fichas no traen')} este dibujo.</p>` : '';
+  return `<figure class="mat-foto">
+      <button type="button" class="mat-foto-prin" data-act="lb" data-i="${prin.i}" aria-label="Ampliar ${esc(t.foto.alt)}">
+        <img src="${esc(prin.url)}" alt="${esc(t.foto.alt)} de SAP ${esc(prin.productos[0].codigo_sap)}" width="${Number(prin.ancho) || ''}" height="${Number(prin.alto) || ''}" data-hash="${esc(prin.hash)}">
+      </button>
+      <figcaption><strong>${esc(t.foto.alt)}</strong> · ${pie(prin)}</figcaption>
+      ${otras}${sinDibujo}
+    </figure>`;
+}
+
+function htmlTipoMaterial(t, h) {
+  const marcas = t.grupos.map((g) => `<div class="mat-marca">
+      <h${h + 1}>${esc(g.etiqueta)} <span class="sec-n">${g.items.length}</span></h${h + 1}>
+      <ul class="mat-lista">${g.items.map((e) => `<li><a href="?sap=${encodeURIComponent(e.p.codigo_sap)}">
+        <span class="badge">SAP ${esc(e.p.codigo_sap)}</span>
+        <strong>${esc(e.p.producto)}</strong>
+        <em>${esc(e.p.formato || '')}</em>
+        <span class="badge badge-campo" title="Casilla de la ficha donde aparece el código">${esc(e.campos.join(' · '))}</span>
+      </a></li>`).join('')}</ul>
+    </div>`).join('');
+  return `<section class="panel mat-tipo">
+      <div class="panel-h"><h${h}>${esc(t.tipo)} <span class="mat-n">${plural(t.n, 'producto', 'productos')}</span></h${h}><span class="nota">${plural(t.grupos.length, 'marca', 'marcas')}</span></div>
+      <div class="mat-cuerpo">
+        ${htmlFotoMaterial(t)}
+        <div class="mat-marcas">${marcas}</div>
+      </div>
+    </section>`;
+}
+
+/** Resultado de un código de material. enLinea: dentro de la búsqueda (h2) o pantalla propia (h1). */
+export function htmlMaterial({ codigo, m, tipos, enLinea = false }) {
+  if (!m) {
+    return `<section><p class="kicker">Material auxiliar</p><h1>No está ${esc(codigo)}</h1><p class="lead">Ninguna ficha tiene ese código en tapón, etiqueta, bandeja, retráctil, separador, asa ni etiquetas de caja o palet.</p><p><a href="?vista=materiales">Ver los materiales compartidos</a></p></section>`;
+  }
+  const h = enLinea ? 2 : 1;
+  const resumen = tipos.map((t) => `${t.tipo} ${t.n}`).join(' · ');
+  return `<section class="material${enLinea ? ' material-en-linea' : ''}" aria-label="Material auxiliar ${esc(m.codigo)}">
+    <div class="mat-cab">
+      <div>
+        <p class="kicker">${icono('box')} Material auxiliar</p>
+        <h${h} class="mat-codigo">${esc(m.codigo)}</h${h}>
+        <p class="lead">${plural(m.n, 'producto lleva', 'productos llevan')} este código · ${esc(resumen)}</p>
+      </div>
+      <div class="acciones">
+        <button type="button" class="btn btn-primary" data-act="excel-mat" data-codigo="${esc(m.codigo)}">${icono('sheet')} Exportar a Excel</button>
+        <button type="button" class="btn btn-secondary" data-act="copiar-mat" data-codigo="${esc(m.codigo)}">${icono('link')} Copiar enlace</button>
+        ${enLinea ? `<a class="btn btn-ghost" href="?mat=${encodeURIComponent(m.codigo)}">Abrir solo</a>` : '<a class="btn btn-ghost" href="?vista=materiales">Materiales compartidos</a>'}
+      </div>
+    </div>
+    ${tipos.length > 1 ? `<p class="nota">El mismo código aparece en ${tipos.length} tipos de material distintos. Se muestran por separado, tal cual vienen en las fichas.</p>` : ''}
+    ${tipos.map((t) => htmlTipoMaterial(t, h + 1)).join('')}
+  </section>`;
+}
+
+/** Coincidencias parciales dentro de la búsqueda. */
+export function htmlMaterialesParciales({ q, items, total }) {
+  if (!items.length) return '';
+  return `<section class="panel mat-parcial">
+    <div class="panel-h"><h2>${icono('box')} Materiales auxiliares con «${esc(q)}»</h2><span class="nota">${plural(total, 'código', 'códigos')}</span></div>
+    <div class="g-list">${items.map((m) => `<a class="g-item" href="?mat=${encodeURIComponent(m.codigo)}"><strong>${esc(m.codigo)}</strong><span>${plural(m.n, 'producto', 'productos')}</span><em>${esc(m.tiposTexto)}</em></a>`).join('')}</div>
+    ${total > items.length ? `<p><a href="?vista=materiales&amp;qm=${encodeURIComponent(q)}&amp;todos=1">Ver los ${total} códigos</a></p>` : ''}
+  </section>`;
+}
+
+export function htmlSugerencias({ items, total, q, activa = -1 }) {
+  if (!items.length) return '';
+  const filas = items.map((m, i) => `<li role="option" id="sug-${i}" class="sug${i === activa ? ' is-on' : ''}" aria-selected="${i === activa ? 'true' : 'false'}" data-act="sug" data-codigo="${esc(m.codigo)}">
+      <strong>${esc(m.codigo)}</strong><span class="sug-tipo">${esc(m.tiposTexto)}</span><span class="sug-n">${plural(m.n, 'producto', 'productos')}</span>
+    </li>`).join('');
+  const mas = total > items.length
+    ? `<li role="option" id="sug-${items.length}" class="sug sug-mas${activa === items.length ? ' is-on' : ''}" aria-selected="${activa === items.length ? 'true' : 'false'}" data-act="sug-todos" data-q="${esc(q)}">Ver los ${total} materiales con «${esc(q)}»</li>`
+    : '';
+  return `<li class="sug-cab" role="presentation">${icono('box')} Materiales auxiliares</li>${filas}${mas}`;
+}
+
+export function htmlMateriales({ grupos, total, totalSinFiltro, q, tipo, tipos, todos }) {
+  const chips = [`<button type="button" class="chip${!tipo ? ' is-on' : ''}" data-act="tipo-mat" data-v="" aria-pressed="${!tipo}">Todos<span>${totalSinFiltro}</span></button>`]
+    .concat(tipos.map(([t, n]) => `<button type="button" class="chip${tipo === t ? ' is-on' : ''}" data-act="tipo-mat" data-v="${esc(t)}" aria-pressed="${tipo === t}">${esc(t)}<span>${n}</span></button>`)).join('');
+  const bloques = grupos.map((g) => `<section class="panel">
+      <div class="panel-h"><h2>${esc(g.tipo)} <span class="mat-n">${plural(g.items.length, 'código', 'códigos')}</span></h2></div>
+      <div class="g-list">${g.items.map((x) => `<a class="g-item" href="?mat=${encodeURIComponent(x.codigo)}"><strong>${esc(x.codigo)}</strong><span>${plural(x.n, 'producto', 'productos')}</span><em>${esc(x.marcas)}</em></a>`).join('')}</div>
+    </section>`).join('');
+  return `<section class="materiales">
+    <p class="kicker">${icono('box')} Materiales auxiliares</p>
+    <h1>${todos ? 'Materiales auxiliares' : 'Materiales compartidos'}</h1>
+    <p class="lead">${todos ? 'Todos los códigos de material de las fichas' : 'Códigos de tapón, etiqueta, bandeja, retráctil, separador, asa o etiqueta de palet que llevan 2 o más productos'}, agrupados por tipo y ordenados por número de productos. Cada uno abre la lista de productos que lo llevan.</p>
+    <div class="acciones">
+      <button type="button" class="btn btn-primary" data-act="excel-compartidos">${icono('sheet')} Exportar a Excel</button>
+      <button type="button" class="btn btn-ghost" data-act="mat-todos" aria-pressed="${todos ? 'true' : 'false'}">${todos ? 'Ver solo los compartidos' : 'Incluir los de un solo producto'}</button>
+    </div>
+    <div class="buscador buscador-sec">
+      <label class="sr" for="qm">Filtrar materiales</label>
+      <span class="buscador-ico" aria-hidden="true">${icono('search')}</span>
+      <input id="qm" type="search" value="${esc(q || '')}" placeholder="Filtrar por código, SAP, marca o producto" autocomplete="off">
+    </div>
+    <div class="chip-row"><span class="chip-label" id="lab-tipo-mat">Tipo</span><div class="chip-scroller" role="group" aria-labelledby="lab-tipo-mat">${chips}</div></div>
+    <p class="cuenta" aria-live="polite">${plural(total, 'código', 'códigos')}</p>
+    ${bloques || '<p class="vacio">Ningún material coincide con el filtro.</p>'}
+  </section>`;
+}
