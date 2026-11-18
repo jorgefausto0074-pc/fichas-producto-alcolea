@@ -52,7 +52,7 @@ ok(comp.length > 0 && comp.every((x) => x.n >= 2 && x.m.tipos.get(x.tipo).size =
 ok(comp.every((x, i) => i === 0 || comp[i - 1].n >= x.n), 'compartidos ordenados por número de productos');
 ok(ix.lista.every((m) => filasMaterial(m, et).length === [...m.tipos.values()].reduce((s, t) => s + t.size, 0)), 'una fila de Excel por producto y tipo');
 ok(ix.lista.every((m) => [...m.tipos.values()].every((t) => porMarca(t, et).reduce((s, g) => s + g.items.length, 0) === t.size)), 'la agrupación por marca no pierde productos');
-ok(/^MATERIAL_[A-Za-z0-9-]+\.xlsx$/.test(nombreSeguro('MATERIAL', '4005529/30')) && nombreSeguro('X', 'Tapón') === 'X_Tapon.xlsx', 'nombres de archivo seguros');
+ok(/^MATERIAL_[A-Za-z0-9-]+\.xlsx$/.test(nombreSeguro('MATERIAL', '1234567/89')) && nombreSeguro('X', 'Tapón') === 'X_Tapon.xlsx', 'nombres de archivo seguros');
 
 if (fallos.length) { console.error('FALLOS:\n' + fallos.join('\n')); process.exit(1); }
 console.log(`materiales OK · ${ix.lista.length} códigos · ${comp.length} compartidos`);
