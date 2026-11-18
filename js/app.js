@@ -8,7 +8,13 @@ import {
   htmlLogin, htmlShell, htmlInicio, htmlBuscar, htmlResultados, htmlProducto,
   htmlComparar, htmlCodigos, htmlCodigoG, htmlLightbox, htmlDock,
   htmlNovedades, htmlResultadoEan, htmlEscaner, htmlCompartir, htmlActualizar,
+  htmlMaterial, htmlMaterialesParciales, htmlSugerencias, htmlMateriales,
 } from './vistas.js';
+import {
+  indexarMateriales, materialExacto, sugerirMateriales, resumenTipos, etiquetasMarca, porMarca,
+  fotosMaterial, materialesCompartidos, filasMaterial, nombreSeguro, COLUMNAS_EXCEL, FOTO_TIPO, ordenTipo,
+} from './materiales.js';
+import { libroXlsx, XLSX_MIME } from './excel.js';
 import { fichasPorEan } from './ean.js';
 import { decodificarCanvas } from './escaner.js';
 import {
@@ -46,6 +52,12 @@ const state = {
   installEvent: null,
   swReg: null,
   hayActualizacion: false,
+  mat: null,
+  etMarca: new Map(),
+  qM: '',
+  tipoM: '',
+  matTodos: false,
+  sug: { items: [], total: 0, activa: -1, q: '' },
 };
 
 const urls = new Map();
@@ -97,6 +109,13 @@ function construirUrl() {
   } else if (r.vista === 'novedades') p.set('vista', 'novedades');
   else if (r.vista === 'actualizar') p.set('vista', 'actualizar');
   else if (r.vista === 'ean' && r.codigo) p.set('ean', r.codigo);
+  else if (r.vista === 'material' && r.codigo) p.set('mat', r.codigo);
+  else if (r.vista === 'materiales') {
+    p.set('vista', 'materiales');
+    if (state.qM) p.set('qm', state.qM);
+    if (state.tipoM) p.set('tipo', state.tipoM);
+    if (state.matTodos) p.set('todos', '1');
+  }
   else if (r.vista === 'buscar') {
     p.set('vista', 'buscar');
     if (state.q) p.set('q', state.q);
@@ -119,7 +138,15 @@ function leerRuta() {
   if (g) return { vista: 'g', codigo: g };
   const ean = (q.get('ean') || '').trim();
   if (ean) return { vista: 'ean', codigo: ean };
+  const mat = (q.get('mat') || '').trim();
+  if (mat) return { vista: 'material', codigo: mat };
   const vista = q.get('vista');
+  if (vista === 'materiales') {
+    state.qM = q.get('qm') || '';
+    state.tipoM = q.get('tipo') || '';
+    state.matTodos = q.get('todos') === '1';
+    return { vista: 'materiales' };
+  }
   if (vista === 'novedades') return { vista: 'novedades' };
   if (vista === 'actualizar') return { vista: 'actualizar' };
   if (vista === 'comparar') {
@@ -164,11 +191,24 @@ function productos() {
 }
 
 function ctxBuscar() {
-  const resultados = filtrar(productos(), { q: state.q, ...state.filtros });
+  let resultados = filtrar(productos(), { q: state.q, ...state.filtros });
+  let bloqueMaterial = '';
+  let bloqueParcial = '';
+  const exacto = state.q && state.mat ? materialExacto(state.mat, state.q) : null;
+  if (exacto) {
+    bloqueMaterial = htmlMaterial({ codigo: exacto.codigo, m: exacto, tipos: vistaMaterial(exacto), enLinea: true });
+    resultados = resultados.filter((p) => !exacto.saps.has(p.codigo_sap));
+  } else if (state.q && state.mat) {
+    const s = sugerirMateriales(state.mat, state.q, 12);
+    if (s.items.length) bloqueParcial = htmlMaterialesParciales({ q: state.q, items: s.items.map(conTextoTipos), total: s.total });
+  }
   return {
     q: state.q,
     filtros: state.filtros,
     resultados,
+    bloqueMaterial,
+    bloqueParcial,
+    hayMaterial: Boolean(exacto),
     total: resultados.length,
     limite: state.limite,
     avisoMezcla: mezclaDeConsulta(state.q),
@@ -365,11 +405,327 @@ function htmlDeVista() {
     return htmlResultadoEan({ codigo: r.codigo, productosLista: lista });
   }
   if (r.vista === 'codigos') return htmlCodigos({ ...listaCodigos(), q: state.qG });
+  if (r.vista === 'material') {
+    const m = state.mat ? materialExacto(state.mat, r.codigo, { minimo: 1 }) : null;
+    return htmlMaterial({ codigo: r.codigo, m, tipos: m ? vistaMaterial(m) : [] });
+  }
+  if (r.vista === 'materiales') return htmlMateriales(ctxMateriales());
   if (r.vista === 'g') {
     const hallado = productosMezcla(r.codigo);
     return htmlCodigoG(hallado);
   }
   return htmlInicio(datosInicio());
+}
+
+/* ---------- Materiales auxiliares ---------- */
+
+function conTextoTipos(m) {
+  return { ...m, codigo: m.codigo, n: m.n, tiposTexto: resumenTipos(m).map((t) => t.tipo).join(' · ') };
+}
+
+/** Modelo de pantalla de un material: por tipo, marcas y fotos (y la galería del visor). */
+function vistaMaterial(m) {
+  const galeria = [];
+  const tipos = [];
+  for (const [tipo, porSap] of m.tipos) {
+    const grupos = porMarca(porSap, state.etMarca);
+    const def = FOTO_TIPO[tipo];
+    let foto = null;
+    let sinFoto = '';
+    if (!def) {
+      sinFoto = `Las fichas no traen dibujo de ${tipo.toLowerCase()}.`;
+    } else {
+      const { casilla, fotos } = fotosMaterial(tipo, porSap);
+      const conUrl = [];
+      for (const f of fotos) {
+        const meta = urlDeHash(f.hash);
+        if (meta) conUrl.push({ ...f, url: meta.url, ancho: meta.ancho, alto: meta.alto });
+      }
+      if (!conUrl.length) {
+        sinFoto = `${porSap.size === 1 ? 'La ficha no trae' : `Ninguna de las ${porSap.size} fichas trae`} el dibujo «${def[1]}».`;
+      } else {
+        for (const f of conUrl) {
+          f.i = galeria.length;
+          galeria.push({ casilla, alt: `${def[1]} · ${tipo} ${m.codigo} · SAP ${f.productos[0].codigo_sap}`, url: f.url, ancho: f.ancho, alto: f.alto, hash: f.hash });
+        }
+        const conDibujo = fotos.reduce((n, f) => n + f.productos.length, 0);
+        foto = { alt: def[1], fotos: conUrl, sinDibujo: porSap.size - conDibujo };
+      }
+    }
+    tipos.push({ tipo, n: porSap.size, grupos, foto, sinFoto });
+  }
+  state.galeriaActual = galeria;
+  return tipos;
+}
+
+function textoMarcas(porSap) {
+  return porMarca(porSap, state.etMarca).slice(0, 3).map((g) => `${g.etiqueta} ${g.items.length}`).join(' · ')
+    + (porMarca(porSap, state.etMarca).length > 3 ? ' · …' : '');
+}
+
+function entradasMateriales() {
+  const q = compactar(state.qM);
+  const base = materialesCompartidos(state.mat, state.matTodos ? 1 : 2);
+  const totalSinFiltro = base.length;
+  const porQ = q ? base.filter((x) => {
+    if (!x.blob) {
+      const ps = [...x.m.tipos.get(x.tipo).values()].map((e) => `${e.p.codigo_sap} ${e.p.producto} ${e.p.marca || ''}`).join(' ');
+      x.blob = compactar(`${x.codigo} ${ps}`);
+    }
+    return x.blob.includes(q);
+  }) : base;
+  const cuenta = new Map();
+  for (const x of porQ) cuenta.set(x.tipo, (cuenta.get(x.tipo) || 0) + 1);
+  const tipos = [...cuenta.entries()].sort((a, b) => ordenTipo(a[0]) - ordenTipo(b[0]));
+  const lista = state.tipoM ? porQ.filter((x) => x.tipo === state.tipoM) : porQ;
+  return { lista, tipos, totalSinFiltro };
+}
+
+function ctxMateriales() {
+  const { lista, tipos, totalSinFiltro } = entradasMateriales();
+  const porTipo = new Map();
+  for (const x of lista) {
+    if (!porTipo.has(x.tipo)) porTipo.set(x.tipo, []);
+    porTipo.get(x.tipo).push({ codigo: x.codigo, n: x.n, marcas: textoMarcas(x.m.tipos.get(x.tipo)) });
+  }
+  const grupos = [...porTipo.entries()].sort((a, b) => ordenTipo(a[0]) - ordenTipo(b[0])).map(([tipo, items]) => ({ tipo, items }));
+  return { grupos, total: lista.length, totalSinFiltro, q: state.qM, tipo: state.tipoM, tipos, todos: state.matTodos };
+}
+
+/** La lista cuelga de <body> (la cabecera recorta lo que sobresale) y se coloca bajo la barra de búsqueda. */
+function colocarSug() {
+  const ul = document.getElementById('q-sug');
+  const input = document.getElementById('q');
+  if (!ul || ul.hidden || !input) return;
+  const r = input.getBoundingClientRect();
+  ul.style.top = `${Math.round(r.bottom + 6)}px`;
+  ul.style.left = `${Math.round(r.left)}px`;
+  ul.style.width = `${Math.round(r.width)}px`;
+  ul.style.maxHeight = `${Math.max(160, Math.min(440, window.innerHeight - r.bottom - 16))}px`;
+}
+
+function pintarSug() {
+  const input = document.getElementById('q');
+  let ul = document.getElementById('q-sug');
+  if (!ul) {
+    ul = document.createElement('ul');
+    ul.id = 'q-sug';
+    ul.className = 'sugerencias';
+    ul.setAttribute('role', 'listbox');
+    ul.setAttribute('aria-label', 'Materiales auxiliares');
+    ul.hidden = true;
+    document.body.appendChild(ul);
+    window.addEventListener('resize', colocarSug);
+    window.addEventListener('scroll', colocarSug, { passive: true });
+  }
+  if (!input) return;
+  const { items, total, activa, q } = state.sug;
+  const abierto = items.length > 0;
+  ul.innerHTML = abierto ? htmlSugerencias({ items, total, q, activa }) : '';
+  ul.hidden = !abierto;
+  colocarSug();
+  input.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+  if (abierto && activa >= 0) {
+    input.setAttribute('aria-activedescendant', `sug-${activa}`);
+    document.getElementById(`sug-${activa}`)?.scrollIntoView({ block: 'nearest' });
+  } else input.removeAttribute('aria-activedescendant');
+}
+
+function actualizarSug(valor) {
+  if (!state.mat) return;
+  const s = sugerirMateriales(state.mat, valor, 8);
+  state.sug = { items: s.items.map(conTextoTipos), total: s.total, activa: -1, q: String(valor || '').trim() };
+  pintarSug();
+}
+
+function cerrarSug() {
+  if (!state.sug.items.length) return;
+  state.sug = { items: [], total: 0, activa: -1, q: '' };
+  pintarSug();
+}
+
+function nOpcionesSug() {
+  return state.sug.items.length + (state.sug.total > state.sug.items.length ? 1 : 0);
+}
+
+function abrirMaterial(codigo) {
+  cerrarSug();
+  const input = document.getElementById('q');
+  state.q = codigo;
+  if (input) {
+    input.value = codigo;
+    input.blur();
+  }
+  ir('material', { codigo });
+}
+
+function verTodosMateriales(q) {
+  cerrarSug();
+  state.qM = q;
+  state.tipoM = '';
+  state.matTodos = true;
+  ir('materiales');
+}
+
+function enlaceMaterial(codigo) {
+  const url = new URL(location.href);
+  url.search = `?mat=${encodeURIComponent(codigo)}`;
+  url.hash = '';
+  return url.toString();
+}
+
+let excelCarga = null;
+function precargarExcel() {
+  const f = () => cargarExcelJS().catch(() => {});
+  if ('requestIdleCallback' in window) requestIdleCallback(f, { timeout: 3000 });
+  else setTimeout(f, 800);
+}
+function cargarExcelJS() {
+  if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+  if (!excelCarga) {
+    excelCarga = new Promise((resolver, rechazar) => {
+      const sc = document.createElement('script');
+      sc.src = 'js/vendor/exceljs.min.js';
+      sc.onload = () => (window.ExcelJS ? resolver(window.ExcelJS) : rechazar(new Error('ExcelJS')));
+      sc.onerror = () => { excelCarga = null; rechazar(new Error('No se ha podido cargar el generador de Excel')); };
+      document.head.appendChild(sc);
+    });
+  }
+  return excelCarga;
+}
+
+function ahoraMadrid() {
+  return new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid', dateStyle: 'long', timeStyle: 'short' });
+}
+
+function esMovil() {
+  return Boolean(navigator.userAgentData?.mobile) || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+}
+
+function avisoApp(titulo, texto, enlace) {
+  document.getElementById('compartir')?.remove();
+  const capa = document.createElement('div');
+  capa.id = 'compartir';
+  capa.innerHTML = `<div class="share" role="dialog" aria-modal="true" aria-labelledby="aviso-tit">
+    <h2 id="aviso-tit">${escapeHtml(titulo)}</h2>
+    <p>${escapeHtml(texto)}</p>
+    <div class="acciones">
+      ${enlace ? `<button type="button" class="btn btn-primary" data-act="copiar" data-copy="${escapeHtml(enlace)}">Copiar enlace</button>` : ''}
+      <button type="button" class="btn btn-ghost" data-act="cerrar-compartir">Cerrar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(capa);
+}
+
+async function blobABase64(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+/** PC: descarga. Móvil: menú compartir del sistema si admite archivos; si no, descarga. App Android: puente nativo si existe. */
+async function entregarArchivo(blob, nombre, titulo, enlace) {
+  const android = window.FichasAndroid;
+  if (android) {
+    if (typeof android.guardarArchivo === 'function') {
+      android.guardarArchivo(nombre, XLSX_MIME, await blobABase64(blob));
+      return 'app';
+    }
+    avisoApp('Excel desde la app Android', 'Esta versión de la app Android no puede guardar archivos. Abre el mismo resultado en Chrome del móvil o en el PC con el enlace y exporta desde allí.', enlace);
+    return 'sin-soporte';
+  }
+  const archivo = typeof File === 'function' ? new File([blob], nombre, { type: XLSX_MIME }) : null;
+  if (archivo && esMovil() && navigator.canShare?.({ files: [archivo] })) {
+    try {
+      await navigator.share({ files: [archivo], title: titulo });
+      return 'compartido';
+    } catch (err) {
+      if (err?.name === 'AbortError') return 'cancelado';
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombre;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  toast(`Descargado ${nombre}`);
+  return 'descargado';
+}
+
+async function exportar(hojas, nombre, titulo, enlace, boton) {
+  if (boton) {
+    boton.disabled = true;
+    boton.setAttribute('aria-busy', 'true');
+  }
+  try {
+    const ExcelJS = await cargarExcelJS();
+    const buf = await libroXlsx(ExcelJS, { hojas });
+    const blob = new Blob([buf], { type: XLSX_MIME });
+    state.ultimoExcel = { nombre, bytes: blob.size };
+    return await entregarArchivo(blob, nombre, titulo, enlace);
+  } catch (err) {
+    toast('No se ha podido generar el Excel.');
+    console.error(err);
+    return 'error';
+  } finally {
+    if (boton) {
+      boton.disabled = false;
+      boton.removeAttribute('aria-busy');
+    }
+  }
+}
+
+function subtitulo(extra) {
+  return `Fichas de producto terminado · Refresco Iberia, planta Alcolea. Datos del ${fechaPaquete(state.formato)}. Exportado el ${ahoraMadrid()} (hora de Madrid). ${extra}`;
+}
+
+function exportarMaterial(codigo, boton) {
+  const m = state.mat && materialExacto(state.mat, codigo, { minimo: 1 });
+  if (!m) return null;
+  const filas = filasMaterial(m, state.etMarca);
+  const tipos = resumenTipos(m).map((t) => t.tipo).join(', ');
+  return exportar([{
+    nombre: 'Productos',
+    titulo: `Material auxiliar ${m.codigo} · ${tipos} · ${m.n} ${m.n === 1 ? 'producto' : 'productos'}`,
+    subtitulo: subtitulo('Una fila por producto y tipo de material. Marca unificada como en los filtros de la app; códigos tal cual en la ficha.'),
+    columnas: COLUMNAS_EXCEL,
+    filas,
+  }], nombreSeguro('MATERIAL', m.codigo), `Material ${m.codigo}`, enlaceMaterial(m.codigo), boton);
+}
+
+function exportarCompartidos(boton) {
+  const { lista } = entradasMateriales();
+  const resumen = lista.map((x) => {
+    const porSap = x.m.tipos.get(x.tipo);
+    const campos = [...new Set([...porSap.values()].flatMap((e) => e.campos))].join(', ');
+    const marcas = porMarca(porSap, state.etMarca).map((g) => `${g.etiqueta} (${g.items.length})`).join(', ');
+    return [x.tipo, campos, x.codigo, String(x.n), marcas];
+  });
+  const filas = lista.flatMap((x) => filasMaterial(x.m, state.etMarca, x.tipo));
+  const filtro = [state.tipoM && `tipo ${state.tipoM}`, state.qM && `filtro «${state.qM}»`].filter(Boolean).join(', ');
+  const que = state.matTodos ? 'Todos los materiales auxiliares' : 'Materiales compartidos (2 o más productos)';
+  const base = state.matTodos ? 'MATERIALES' : 'MATERIALES_COMPARTIDOS';
+  return exportar([
+    {
+      nombre: 'Resumen',
+      titulo: `${que} · ${lista.length} códigos${filtro ? ` · ${filtro}` : ''}`,
+      subtitulo: subtitulo('Una fila por código y tipo de material, ordenadas por número de productos.'),
+      columnas: [['Tipo de material', 18], ['Campos de la ficha', 26], ['Código', 18], ['Nº de productos', 14], ['Marcas', 70]],
+      filas: resumen,
+    },
+    {
+      nombre: 'Productos',
+      titulo: `${que} · detalle por producto`,
+      subtitulo: subtitulo('Una fila por código, tipo de material y producto. Marca unificada como en los filtros de la app.'),
+      columnas: COLUMNAS_EXCEL,
+      filas,
+    },
+  ], nombreSeguro(base, state.tipoM), que, location.href, boton);
 }
 
 function relacionadosComparar(lista) {
@@ -484,11 +840,13 @@ function titulo() {
   else if (r.vista === 'ean') t = 'Código de barras';
   else if (r.vista === 'codigos') t = 'Códigos G';
   else if (r.vista === 'g') t = r.codigo;
+  else if (r.vista === 'material') t = `Material ${r.codigo}`;
+  else if (r.vista === 'materiales') t = 'Materiales compartidos';
   document.title = `${t} · Fichas Alcolea`;
 }
 
 function marcarTabs() {
-  const mapa = { g: 'codigos', producto: 'buscar', ean: 'buscar' };
+  const mapa = { g: 'codigos', producto: 'buscar', ean: 'buscar', material: 'materiales' };
   const actual = mapa[state.ruta.vista] || state.ruta.vista;
   document.querySelectorAll('.tabbar a[data-go]').forEach((a) => {
     if (a.dataset.go === actual) a.setAttribute('aria-current', 'page');
@@ -519,6 +877,7 @@ function renderVista({ foco = true } = {}) {
   }
   el.innerHTML = htmlDeVista();
   observarThumbs(el);
+  if (state.ruta.vista === 'material' || state.ruta.vista === 'materiales') precargarExcel();
   const planta = document.getElementById('btn-planta');
   if (planta) planta.setAttribute('aria-pressed', document.documentElement.classList.contains('planta') ? 'true' : 'false');
   marcarTabs();
@@ -542,8 +901,10 @@ function pintarResultados() {
     renderVista({ foco: false });
     return;
   }
-  el.innerHTML = htmlResultados(ctxBuscar());
+  const ctx = ctxBuscar();
+  el.innerHTML = htmlResultados(ctx);
   observarThumbs(el);
+  if (ctx.hayMaterial) precargarExcel();
   titulo();
 }
 
@@ -615,6 +976,8 @@ function aplicarPaquete(paquete) {
   const idx = indexar(paquete.doc);
   state.porSap = idx.porSap;
   state.porMezcla = idx.porMezcla;
+  state.mat = indexarMateriales(paquete.doc?.productos || []);
+  state.etMarca = etiquetasMarca(paquete.doc?.productos || []);
   state.listo = true;
   state.ocupado = false;
   state.errorLogin = '';
@@ -949,6 +1312,7 @@ async function onDescartar() {
 }
 
 function ir(vista, extra = {}, { replace = false } = {}) {
+  cerrarSug();
   if (vista === 'inicio') {
     state.q = '';
     state.filtros = filtroVacio();
@@ -1133,9 +1497,53 @@ function engancharLb() {
 }
 
 function onClick(ev) {
+  if (!ev.target.closest('#form-buscar, #q-sug')) cerrarSug();
   const act = ev.target.closest('[data-act]');
   if (act) {
     const tipo = act.dataset.act;
+    if (tipo === 'sug') {
+      ev.preventDefault();
+      abrirMaterial(act.dataset.codigo);
+      return;
+    }
+    if (tipo === 'sug-todos') {
+      ev.preventDefault();
+      verTodosMateriales(act.dataset.q || '');
+      return;
+    }
+    if (tipo === 'excel-mat') {
+      ev.preventDefault();
+      exportarMaterial(act.dataset.codigo, act);
+      return;
+    }
+    if (tipo === 'excel-compartidos') {
+      ev.preventDefault();
+      exportarCompartidos(act);
+      return;
+    }
+    if (tipo === 'copiar-mat') {
+      ev.preventDefault();
+      copiar(`Material auxiliar ${act.dataset.codigo} en las fichas de producto terminado. Hace falta la contraseña de la aplicación para verlo.\n${enlaceMaterial(act.dataset.codigo)}`);
+      return;
+    }
+    if (tipo === 'tipo-mat') {
+      ev.preventDefault();
+      const v = act.dataset.v || '';
+      state.tipoM = state.tipoM === v ? '' : v;
+      history.replaceState(null, '', construirUrl());
+      renderVista({ foco: false });
+      document.querySelector(`[data-act="tipo-mat"][data-v="${CSS.escape(state.tipoM)}"]`)?.focus();
+      return;
+    }
+    if (tipo === 'mat-todos') {
+      ev.preventDefault();
+      state.matTodos = !state.matTodos;
+      state.tipoM = '';
+      history.replaceState(null, '', construirUrl());
+      renderVista({ foco: false });
+      document.querySelector('[data-act="mat-todos"]')?.focus();
+      return;
+    }
     if (tipo === 'salir') {
       ev.preventDefault();
       salir();
@@ -1189,6 +1597,7 @@ function onClick(ev) {
     }
     if (tipo === 'limpiar-q') {
       ev.preventDefault();
+      cerrarSug();
       onQuery('');
       const input = document.getElementById('q');
       if (input) {
@@ -1335,7 +1744,7 @@ function onClick(ev) {
   const a = ev.target.closest('a[href]');
   if (!a || modificado(ev)) return;
   const href = a.getAttribute('href') || '';
-  if (href.startsWith('http') || href.startsWith('mailto:')) return;
+  if (href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('blob:') || a.hasAttribute('download')) return;
   const url = new URL(href, location.href);
   if (url.origin !== location.origin) return;
   ev.preventDefault();
@@ -1369,7 +1778,22 @@ function onInput(ev) {
     pintarJuicio(ev.target);
     return;
   }
-  if (ev.target.id === 'q') onQuery(ev.target.value);
+  if (ev.target.id === 'q') {
+    onQuery(ev.target.value);
+    actualizarSug(ev.target.value);
+  }
+  if (ev.target.id === 'qm') {
+    const pos = ev.target.selectionStart;
+    state.qM = ev.target.value;
+    state.ruta = { vista: 'materiales' };
+    history.replaceState(null, '', construirUrl());
+    renderVista({ foco: false });
+    const qm = document.getElementById('qm');
+    if (qm) {
+      qm.focus();
+      if (pos != null) qm.setSelectionRange(pos, pos);
+    }
+  }
   if (ev.target.id === 'qg') {
     const pos = ev.target.selectionStart;
     state.qG = ev.target.value;
@@ -1384,7 +1808,46 @@ function onInput(ev) {
   }
 }
 
+function onKeySug(ev) {
+  const n = nOpcionesSug();
+  if (ev.key === 'ArrowDown' && n) {
+    ev.preventDefault();
+    state.sug.activa = (state.sug.activa + 1) % n;
+    pintarSug();
+    return true;
+  }
+  if (ev.key === 'ArrowUp' && n) {
+    ev.preventDefault();
+    state.sug.activa = state.sug.activa <= 0 ? n - 1 : state.sug.activa - 1;
+    pintarSug();
+    return true;
+  }
+  if (ev.key === 'Escape' && n) {
+    ev.preventDefault();
+    cerrarSug();
+    return true;
+  }
+  if (ev.key === 'Enter') {
+    const i = state.sug.activa;
+    if (n && i >= 0) {
+      ev.preventDefault();
+      if (i < state.sug.items.length) abrirMaterial(state.sug.items[i].codigo);
+      else verTodosMateriales(state.sug.q);
+      return true;
+    }
+    const exacto = state.mat && materialExacto(state.mat, ev.target.value);
+    if (exacto) {
+      ev.preventDefault();
+      abrirMaterial(exacto.codigo);
+      return true;
+    }
+    cerrarSug();
+  }
+  return false;
+}
+
 function onKey(ev) {
+  if (ev.target?.id === 'q' && onKeySug(ev)) return;
   if (ev.key === '/' && !esCampo(ev.target)) {
     const q = document.getElementById('q');
     if (q) {
@@ -1578,6 +2041,15 @@ async function iniciar() {
   document.addEventListener('submit', onSubmit);
   document.addEventListener('input', onInput);
   document.addEventListener('keydown', onKey);
+  document.addEventListener('focusout', (ev) => {
+    if (ev.target?.id !== 'q') return;
+    setTimeout(() => {
+      if (!document.activeElement?.closest?.('#form-buscar, #q-sug')) cerrarSug();
+    }, 150);
+  });
+  document.addEventListener('mousedown', (ev) => {
+    if (ev.target.closest?.('#q-sug')) ev.preventDefault();
+  });
   window.addEventListener('popstate', () => {
     if (!state.listo) return;
     state.ruta = leerRuta();
