@@ -617,6 +617,12 @@ function avisoApp(titulo, texto, enlace) {
   document.body.appendChild(capa);
 }
 
+/** Respuesta del puente nativo de la app Android v1.1.0+ al guardar un archivo. */
+window.__fichasArchivo = (r) => {
+  if (r?.ok) toast(`Guardado en ${r.ubicacion}/${r.nombre}`);
+  else toast('No se ha podido guardar el archivo en el teléfono.');
+};
+
 async function blobABase64(blob) {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   let bin = '';
@@ -629,10 +635,11 @@ async function entregarArchivo(blob, nombre, titulo, enlace) {
   const android = window.FichasAndroid;
   if (android) {
     if (typeof android.guardarArchivo === 'function') {
+      // App Android v1.1.0+: guarda en Descargas/Fichas Alcolea y abre el menú de compartir del sistema.
       android.guardarArchivo(nombre, XLSX_MIME, await blobABase64(blob));
       return 'app';
     }
-    avisoApp('Excel desde la app Android', 'Esta versión de la app Android no puede guardar archivos. Abre el mismo resultado en Chrome del móvil o en el PC con el enlace y exporta desde allí.', enlace);
+    avisoApp('Excel desde la app Android', 'Esta versión de la app Android (v1.0.0) no puede guardar archivos. Instala la v1.1.0 encima (github.com/jorgefausto0074-pc/fichas-producto-alcolea/releases/latest) o abre este resultado en Chrome del móvil o en el PC con el enlace y exporta desde allí.', enlace);
     return 'sin-soporte';
   }
   const archivo = typeof File === 'function' ? new File([blob], nombre, { type: XLSX_MIME }) : null;
