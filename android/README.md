@@ -13,6 +13,7 @@ El APK no contiene `datos.enc` ni fichas. El código, los datos y el service wor
 - El botón atrás recorre el historial de la web
 - Los enlaces que no son de la web se abren en el navegador
 - Compartir e imprimir usan el sistema Android
+- Desde v1.1.0 (versionCode 2), «Exportar a Excel» guarda el .xlsx en Descargas/Fichas Alcolea (Android 10+; en Android 7-9, en la carpeta Documentos de la app) y abre el menú de compartir del sistema. Puente JS: `FichasAndroid.guardarArchivo(nombre, mime, base64)`; la respuesta llega a `window.__fichasArchivo`
 
 ## Compilar
 
