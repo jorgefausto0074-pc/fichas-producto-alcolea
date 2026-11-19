@@ -1,4 +1,4 @@
-const SHELL = 'fichas-shell-v10';
+const SHELL = 'fichas-shell-v11';
 const DATOS = 'fichas-datos-v1';
 const BASE = new URL('./', self.location);
 
@@ -21,6 +21,7 @@ const SHELL_FILES = [
   'js/actualizar.js',
   'js/materiales.js',
   'js/excel.js',
+  'js/efectos.js',
   'js/vendor/zxing-ean.js',
   'js/vendor/exceljs.min.js',
   'manifest.webmanifest',

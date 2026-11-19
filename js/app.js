@@ -1,5 +1,6 @@
 import { derivarClave, descifrarConClave } from './descifrar.js';
 import { guardarClave, leerClave, borrarClave } from './sesion.js';
+import { activarEfectos, transicionTarjeta } from './efectos.js';
 import { obtenerFormato, obtenerCifrado, indexar } from './cargar.js';
 import { filtrar } from './buscar.js';
 import { agruparMarcas, compactar, esCodigoG, fechaPaquete, ordenFecha, CASILLAS } from './util.js';
@@ -884,6 +885,7 @@ function renderVista({ foco = true } = {}) {
   }
   el.innerHTML = htmlDeVista();
   observarThumbs(el);
+  activarEfectos(el);
   if (state.ruta.vista === 'material' || state.ruta.vista === 'materiales') precargarExcel();
   const planta = document.getElementById('btn-planta');
   if (planta) planta.setAttribute('aria-pressed', document.documentElement.classList.contains('planta') ? 'true' : 'false');
@@ -1790,9 +1792,13 @@ function onClick(ev) {
   const url = new URL(href, location.href);
   if (url.origin !== location.origin) return;
   ev.preventDefault();
-  history.pushState(null, '', `${url.pathname}${url.search}`);
-  state.ruta = leerRuta();
-  renderVista();
+  const navegar = () => {
+    history.pushState(null, '', `${url.pathname}${url.search}`);
+    state.ruta = leerRuta();
+    renderVista();
+  };
+  if (a.closest('.pcard') && url.searchParams.get('sap')) transicionTarjeta(a, navegar);
+  else navegar();
 }
 
 function onSubmit(ev) {
