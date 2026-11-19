@@ -35,21 +35,26 @@ function notasInc(avisos) {
   return avisos.map((i) => `<p class="inc-line"><strong>${esc(TIPO_INC[i.tipo] || i.tipo)}.</strong> ${esc(i.detalle)}</p>`).join('');
 }
 
+/** Barra Std/Máx/Mín: banda del rango Mín–Máx y marca del Std (se anima al aparecer, ver efectos.js). */
 function barra(fila) {
   const min = parseNum(fila.min);
   const max = parseNum(fila.max);
   const std = parseNum(fila.std);
   if (min == null || max == null || !(max > min)) return '';
-  let pct = null;
-  let fuera = false;
-  if (std != null) {
-    pct = ((std - min) / (max - min)) * 100;
-    if (pct < 0 || pct > 100) fuera = true;
-    pct = Math.min(100, Math.max(0, pct));
-  }
-  return `<div class="track${fuera ? ' is-out' : ''}" aria-hidden="true"><div class="track-fill"></div>${
-    pct == null ? '' : `<span class="mark" style="left:${pct.toFixed(2)}%"></span>`
+  const r = max - min;
+  const lo = min - r * 0.35;
+  const hi = max + r * 0.35;
+  const pos = (v) => Math.min(100, Math.max(0, ((v - lo) / (hi - lo)) * 100)).toFixed(2);
+  const fuera = std != null && (std < min || std > max);
+  return `<div class="rango" aria-hidden="true"><span class="rango-rail"></span><span class="rango-banda" style="left:${pos(min)}%;width:${(pos(max) - pos(min)).toFixed(2)}%"></span>
+    <span class="rango-lab" style="left:${pos(min)}%">${esc(fila.min)}</span><span class="rango-lab" style="left:${pos(max)}%">${esc(fila.max)}</span>${
+    std == null ? '' : `<span class="rango-std${fuera ? ' is-out' : ''}" style="left:${pos(std)}%"></span>`
   }</div>${fuera ? '<p class="inc-line">El estándar cae fuera del máximo y el mínimo. Se muestra el valor del PDF, sin ajustarlo.</p>' : ''}`;
+}
+
+/** Rango invertido en el PDF (Máx < Mín): se avisa y NUNCA se corrige ni se reordena. */
+function avisoInvertido(fila) {
+  return `<div class="rango-inv" role="note"><b class="ico" aria-hidden="true">⚠</b><div><strong>Incidencia del PDF de origen:</strong> el máximo (${esc(fila.max)}) es menor que el mínimo (${esc(fila.min)}). No se ha corregido ni reordenado.<span class="rango-inv-rail" aria-hidden="true"></span></div></div>`;
 }
 
 function ariaFila(fila) {
@@ -103,9 +108,9 @@ function renderFila(fila, path, incs, vacios, medible = false) {
     </div>`;
   }
   const nums = [
-    fila.min != null ? `<span><i>Mín.</i><b>${esc(fila.min)}</b></span>` : '',
-    fila.std != null ? `<span class="is-std"><i>Std.</i><b>${esc(fila.std)}</b></span>` : '',
-    fila.max != null ? `<span><i>Máx.</i><b>${esc(fila.max)}</b></span>` : '',
+    fila.min != null ? `<span><i>Mín.</i><b data-cifra>${esc(fila.min)}</b></span>` : '',
+    fila.std != null ? `<span class="is-std"><i>Std.</i><b data-cifra>${esc(fila.std)}</b></span>` : '',
+    fila.max != null ? `<span><i>Máx.</i><b data-cifra>${esc(fila.max)}</b></span>` : '',
   ].join('');
   const minN = parseNum(fila.min);
   const maxN = parseNum(fila.max);
@@ -117,7 +122,7 @@ function renderFila(fila, path, incs, vacios, medible = false) {
     </div>
     <div class="gauge-nums" aria-label="${esc(ariaFila(fila))}">${nums}</div>
     ${fila.valor != null ? `<p class="valor-extra">${esc(fila.valor)}</p>` : ''}
-    ${invertido ? '<p class="inc-line">En el PDF el máximo es menor que el mínimo. No se ha reordenado.</p>' : barra(fila)}
+    ${invertido ? avisoInvertido(fila) : barra(fila)}
     ${notas}
     ${medible ? htmlMedida(fila, path, avisos) : ''}
   </div>`;
@@ -177,38 +182,18 @@ function filaChips(titulo, clave, opciones, actual) {
 const MARCA = 'img/marca2026/';
 const TAGLINE = 'The agile beverage solutions partner.';
 
-function burbujasLogin(n) {
-  let html = '';
-  for (let i = 0; i < n; i += 1) {
-    // Distribución fija (sin Math.random) para que el render sea estable.
-    const left = (i * 37 + 11) % 100;
-    const size = 8 + ((i * 13) % 26);
-    const delay = (i * 1.7) % 9;
-    const dur = 7 + ((i * 3) % 7);
-    html += `<span class="bubble" style="left:${left}%;width:${size}px;height:${size}px;animation-delay:-${delay.toFixed(1)}s;animation-duration:${dur}s"></span>`;
-  }
-  return `<div class="bubbles" aria-hidden="true">${html}</div>`;
-}
+const OLA = (cls, color, a) => `<svg class="${cls}" viewBox="0 0 2880 320" preserveAspectRatio="none" focusable="false"><path fill="${color}" d="M0 ${a}C240 ${a - 60} 480 ${a - 60} 720 ${a}S1200 ${a + 60} 1440 ${a}S1920 ${a - 60} 2160 ${a}S2640 ${a + 60} 2880 ${a}V320H0Z"/></svg>`;
 
-/** Fondo del acceso (imagen Refresco 2026, igual que Inspecciones Calidad v1.5.0). */
+/** Fondo del acceso: navy con olas lentas (SVG en línea, solo transform). */
 function decoracionLogin() {
-  const botellas = [1, 2, 3, 4]
-    .map((n, i) => `<div class="gate-bottle" style="--i:${i}"><img src="${MARCA}foto-linea-${n}.webp" alt=""></div>`)
-    .join('');
-  return `<div class="gate-decor" aria-hidden="true">
-      <div class="gate-photo"><img src="${MARCA}foto-burbujas.webp" alt=""></div>
-      <img class="gate-circles" src="${MARCA}circulos-azul.svg" alt="">
-      <img class="gate-stripe" src="${MARCA}stripe-r-naranja.svg" alt="">
-      <div class="gate-bottles">${botellas}</div>
-      ${burbujasLogin(18)}
-    </div>`;
+  return `<div class="login-olas" aria-hidden="true">${OLA('ola1', '#083DC4', 150)}${OLA('ola2', '#B1DCED', 190)}${OLA('ola3', '#0b2a66', 230)}</div>
+    <div class="login-marca"><img src="${MARCA}refresco-logo-naranja.png" alt="Refresco"><p>Fichas de producto · Alcolea</p><i></i></div>`;
 }
 
 export function htmlLogin({ error = '', ocupado = false, fecha = '', destino = '' }) {
   return `<div class="login">
     ${decoracionLogin()}
     <main class="login-card" id="contenido">
-      <img class="login-logo" src="${MARCA}refresco-logo-naranja.png" alt="Refresco">
       <h1>Fichas de producto terminado</h1>
       <p class="login-sub">Refresco Iberia · Planta Alcolea</p>
       ${fecha ? `<p class="fecha-datos">Datos del ${esc(fecha)}</p>` : ''}
@@ -432,12 +417,13 @@ function htmlGaleria(galeria) {
   if (!galeria.length) {
     return seccion('Imágenes del producto', 'image', '<p class="vacio">Esta ficha no trae dibujos.</p>', { open: true });
   }
-  const grid = `<div class="galeria">${galeria.map((g, i) => `
+  const puntos = galeria.length > 1 ? `<div class="gal-puntos" aria-hidden="true">${galeria.map((_, i) => `<i${i ? '' : ' class="is-on"'}></i>`).join('')}</div>` : '';
+  const grid = `<div class="galeria" tabindex="0" aria-label="Imágenes del producto: desliza para ver más">${galeria.map((g, i) => `
     <button type="button" class="gal-item" data-act="lb" data-i="${i}">
       <img src="${esc(g.url)}" alt="${esc(g.alt)}" width="${Number(g.ancho) || ''}" height="${Number(g.alto) || ''}" data-hash="${esc(g.hash || '')}">
       <span>${esc(g.alt)}</span>
-    </button>`).join('')}</div>`;
-  return seccion('Imágenes del producto', 'image', `<p class="nota">Dibujos recortados de la página 2 de la ficha. Pulsa para ampliar.</p>${grid}`, {
+    </button>`).join('')}</div>${puntos}`;
+  return seccion('Imágenes del producto', 'image', `<p class="nota">Dibujos recortados de la página 2 de la ficha. Desliza para ver más y pulsa para ampliar.</p>${grid}`, {
     open: true,
     cuenta: String(galeria.length),
   });
@@ -496,6 +482,22 @@ function htmlImpresion(p, galeria) {
   </section>`;
 }
 
+/** Portada de la ficha: foto de la etiqueta sobre navy; al bajar se encoge hacia la barra fija (efectos.js). */
+function htmlPortada(p, galeria) {
+  const foto = (galeria || []).find((g) => g.casilla === 'etiqueta') || (galeria || [])[0];
+  if (!foto) return '';
+  const img = (cls) => `<img class="${cls}" src="${esc(foto.url)}" alt="${cls === 'portada-img' ? esc(foto.alt) : ''}" data-hash="${esc(foto.hash || '')}" data-vt="foto">`;
+  return `<section class="portada" aria-label="Portada de la ficha SAP ${esc(p.codigo_sap)}">
+      <div class="portada-foto">${img('portada-img')}</div>
+      <div class="portada-txt">
+        <div class="portada-codes"><span>SAP ${esc(p.codigo_sap)}</span>${p.sap_mezcla ? `<span>${esc(p.sap_mezcla)}</span>` : ''}<span>${esc(etiquetaGrupo(p.grupo_pdf))}</span></div>
+        <p class="portada-nombre">${esc(p.producto)}</p>
+        <p class="portada-sub">${esc(p.formato || '')}${p.marca ? ` · ${esc(p.marca)}` : ''}</p>
+      </div>
+    </section>
+    <div class="ficha-mini" aria-hidden="true">${img('mini-img')}<div><b>${esc(p.producto)}</b><small>SAP ${esc(p.codigo_sap)} · ${esc(p.formato || '')}</small></div></div>`;
+}
+
 export function htmlProducto({ p, hermanos, galeria, vacios, enComparar, favorito = false, modificada = false }) {
   const incs = p.incidencias || [];
   const banner = incs.length ? `<aside class="banner-inc" role="status">
@@ -521,6 +523,7 @@ export function htmlProducto({ p, hermanos, galeria, vacios, enComparar, favorit
     ${htmlImpresion(p, galeria)}
     <div class="pantalla">
     <div class="print-head"><span class="wordmark sm">refresc<span>o</span></span><span>Ficha de producto terminado · Planta Alcolea</span><span>SAP ${esc(p.codigo_sap)}</span></div>
+    ${htmlPortada(p, galeria)}
     ${banner}
     <header class="hero-prod">
       <div class="hero-codes">
