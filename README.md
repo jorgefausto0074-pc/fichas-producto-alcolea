@@ -1,6 +1,6 @@
 # Fichas de producto terminado · Alcolea
 
-Aplicación para consultar las fichas de producto terminado de Refresco Iberia, planta Alcolea. La usa el equipo de Calidad. Responsable: Jorge Quezada Ortega, coordinador de Calidad.
+Aplicación para consultar las fichas de producto terminado de Refresco Iberia, planta Alcolea. La usa el equipo de Calidad. Responsable: Jorge Quesada Ortega, coordinador de Calidad.
 
 La aplicación es un sitio estático. No hay compilación. GitHub Pages publica la rama `main`, carpeta raíz, en:
 

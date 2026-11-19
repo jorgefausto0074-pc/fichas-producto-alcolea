@@ -525,6 +525,8 @@ def finaliza(productos):
         if p["aseptico"] is not None and (p["aseptico"] != (p["grupo_pdf"] == "Asépticos")):
             p["incidencias"].append(dict(tipo="aseptico_incoherente", campo="aseptico",
                                          detalle=f"casilla Aseptico={p['aseptico']} pero está en el PDF {p['grupo_pdf']}"))
+    import correcciones   # correcciones manuales con OK de Jorge (ver correcciones.py)
+    correcciones.aplicar(productos, correcciones.cargar(DATOS))
     for p in productos: p.setdefault("_geom", {})
     return productos
 
@@ -584,6 +586,11 @@ def main():
         nota="Valores como TEXTO tal cual aparecen en el PDF. 'con_gas_derivado' se deduce de que haya CO2. "
              "'limites_cliente' casilla_1/casilla_2 no tienen encabezado en el PDF.",
         productos=productos)
+    import correcciones
+    lista_corr = correcciones.cargar(DATOS)
+    if lista_corr:   # viaja cifrada en datos.enc para que el actualizador de la web la vuelva a aplicar
+        doc["correcciones"] = lista_corr
+        doc.move_to_end("productos")
     previo_bytes = previo_path.read_bytes() if previo_path.exists() else None
     tmp = previo_path.with_suffix(".tmp")
     tmp.write_text(json.dumps(doc, ensure_ascii=False, indent=1))

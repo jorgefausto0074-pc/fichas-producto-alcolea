@@ -111,13 +111,26 @@ a:hover { text-decoration: none; }
 .login-sub { color: #496380; margin: 0 0 1.1rem; }
 .login .fecha-datos { color: #496380; font-size: .9rem; }
 .login label { display: block; text-align: left; font-weight: 700; font-size: .9rem; color: var(--navy); margin: .4rem 0 .2rem; }
-.login input[type="password"] {
-  width: 100%; min-height: 48px; margin: .5rem 0 1rem; padding: .65rem .9rem;
+.login .campo-clave { position: relative; margin: .5rem 0 1rem; }
+.login .campo-clave input {
+  width: 100%; min-height: 48px; margin: 0; padding: .65rem 3.4rem;
   border-radius: 12px; border: 1.5px solid #D3DEE8; background: #fff; color: var(--navy);
   font-size: 1.1rem; text-align: center;
   transition: border-color .2s, box-shadow .2s;
 }
-.login input[type="password"]:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(8, 61, 196, .14); }
+.login .campo-clave input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(8, 61, 196, .14); }
+.ver-clave {
+  position: absolute; top: 50%; right: 2px; transform: translateY(-50%);
+  width: var(--tap); height: var(--tap); min-width: 44px; min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 10px; background: transparent; color: var(--navy); cursor: pointer; padding: 0;
+}
+.ver-clave:hover:not(:disabled) { color: var(--blue); background: var(--blue-soft); }
+.ver-clave:focus-visible { outline: 3px solid var(--orange); outline-offset: 1px; }
+.ver-clave[aria-pressed="true"] { color: var(--orange); }
+.ver-clave .ojo-cerrado, .ver-clave[aria-pressed="true"] .ojo-abierto { display: none; }
+.ver-clave[aria-pressed="true"] .ojo-cerrado { display: block; }
+.ver-clave:disabled { opacity: .45; cursor: default; }
 .kicker { margin: 0; font-size: .78rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--blue); }
 .lead { color: var(--muted); margin: 0 0 .8rem; line-height: 1.45; }
 .fecha-datos { margin: 0 0 .8rem; color: var(--navy); }
@@ -844,3 +857,9 @@ html.planta .medida-juicio.es-fuera { border-width: 3px; }
 }
 .mat-cab :focus-visible { outline-color: var(--ice); }
 .material h1[tabindex="-1"]:focus, .materiales h1[tabindex="-1"]:focus { outline: none; }
+
+.nota-corr { margin: 0 0 1rem; padding: .7rem 1rem; border-left: 4px solid var(--blue); border-radius: 12px; background: var(--blue-soft); color: var(--navy); font-size: .9rem; }
+.nota-corr ul { margin: .3rem 0 0; padding-left: 1.1rem; }
+.aviso-app { margin: 0 0 1rem; padding: .7rem 1rem; border-left: 4px solid var(--orange); border-radius: 12px; background: var(--warn-bg); color: var(--navy); }
+.mat-desc { font-weight: 700; color: var(--blue); text-transform: none; }
+.mat-desc-nota { margin: -.2rem 0 .6rem; }

@@ -5,6 +5,7 @@ con las palabras de los valores guardados en productos.json (nada perdido, nada 
 import json, os, sys, collections, re
 from pathlib import Path
 import pymupdf
+import correcciones   # las correcciones con OK se comparan con el valor del PDF
 BASE = Path(os.environ["PT_BASE"]).resolve() if os.environ.get("PT_BASE") else Path(__file__).resolve().parent.parent   # PT_BASE = carpeta de trabajo (CI)
 d = json.load(open(BASE / "datos/productos.json"))
 FIJO_SPAN = "(RESTO DE VALORES DENTRO DE MARGENES)"
@@ -17,7 +18,7 @@ def hoja_tokens(v, out):
 docs = {}
 fallos = 0; resumen = collections.Counter()
 informe = []
-for p in d["productos"]:
+for p in map(correcciones.revertir, d["productos"]):
     f = p["fuente"]["pdf"]
     if not (BASE / "fuentes" / f).exists():   # CI con un solo PDF: el otro grupo ya se verificó al publicarse
         resumen["omitidas_sin_pdf"] += 1; continue
