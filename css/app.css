@@ -984,3 +984,23 @@ html.planta .medida-juicio.es-fuera { border-width: 3px; }
   .galeria { display: grid !important; grid-template-columns: repeat(3, 1fr); overflow: visible; }
   .galeria .gal-item span::after { content: none; }
 }
+
+/* Carrusel con ratón (19/11/2026): flechas, puntos pulsables y arrastre */
+.gal-wrap { position: relative; }
+.gal-flecha { position: absolute; top: calc(50% - 30px); width: 44px; height: 44px; border-radius: 999px; border: 0; z-index: 2;
+  background: rgba(7, 26, 64, .82); color: var(--white); font-size: 1.9rem; line-height: 1; display: grid; place-items: center; cursor: pointer;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .25); transition: background .2s, transform .2s; }
+.gal-flecha:hover { background: var(--orange); }
+.gal-flecha:active { transform: scale(.94); }
+.gal-flecha:focus-visible { outline: 3px solid var(--orange); outline-offset: 2px; }
+.gal-prev { left: 4px; }
+.gal-next { right: 4px; }
+.galeria { cursor: grab; }
+.galeria.is-arrastre { cursor: grabbing; scroll-snap-type: none; user-select: none; }
+.galeria img { -webkit-user-drag: none; user-select: none; }
+.gal-puntos button { border: 0; background: none; padding: 10px 2px; cursor: pointer; display: grid; place-items: center; }
+.gal-puntos button i { display: block; width: 8px; height: 8px; border-radius: 999px; background: var(--grey); transition: width .25s, background .25s; }
+.gal-puntos button.is-on i { width: 24px; background: var(--orange); }
+.gal-puntos { gap: 4px; }
+.buscar-filtros-h { margin: 1.4rem 0 .5rem; font-size: 1.15rem; color: var(--navy); }
+@media print { .gal-flecha, .gal-puntos { display: none !important; } }

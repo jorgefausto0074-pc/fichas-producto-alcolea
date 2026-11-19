@@ -1081,6 +1081,16 @@ async function salir() {
   pintarLogin();
 }
 
+/** La app Android abre el selector de PDF desde v1.2.0; en v1.0.0/v1.1.0 se mantiene el aviso. */
+function appSinSelectorPdf() {
+  const a = window.FichasAndroid;
+  if (!a) return false;
+  let v = '';
+  try { v = typeof a.version === 'function' ? String(a.version() || '') : ''; } catch { v = ''; }
+  const [ma, mi] = v.split('.').map((x) => parseInt(x, 10) || 0);
+  return !(ma > 1 || (ma === 1 && mi >= 2));
+}
+
 function vistaAct() {
   return {
     fase: act.fase,
@@ -1090,7 +1100,7 @@ function vistaAct() {
     ocupado: act.ocupado,
     informe: act.informe,
     pideClaveApp: !claveAplicacion,
-    enApp: Boolean(window.FichasAndroid),
+    enApp: appSinSelectorPdf(),
   };
 }
 
@@ -1367,9 +1377,10 @@ function aplicarFiltro(k, v) {
   const ya = state.ruta.vista === 'buscar';
   state.ruta = { vista: 'buscar' };
   history[ya ? 'replaceState' : 'pushState'](null, '', construirUrl());
-  renderVista({ foco: !ya });
+  renderVista({ foco: false });
   const pulsado = [...document.querySelectorAll(`[data-act="filtro"][data-k="${k}"]`)].find((b) => (b.dataset.v ?? '') === v);
-  pulsado?.focus();
+  pulsado?.focus({ preventScroll: true });
+  scrollTo(0, 0); // los resultados están arriba
 }
 
 function toggleComparar(sap) {
@@ -1395,6 +1406,7 @@ function onQuery(value) {
   history[ya ? 'replaceState' : 'pushState'](null, '', construirUrl());
   if (ya) pintarResultados();
   else renderVista({ foco: false });
+  scrollTo(0, 0); // los resultados están arriba
 }
 
 function abrirLb(indice) {
