@@ -1,4 +1,4 @@
-const SHELL = 'fichas-shell-v9';
+const SHELL = 'fichas-shell-v10';
 const DATOS = 'fichas-datos-v1';
 const BASE = new URL('./', self.location);
 

@@ -12,7 +12,7 @@ import {
 } from './vistas.js';
 import {
   indexarMateriales, materialExacto, sugerirMateriales, resumenTipos, etiquetasMarca, porMarca,
-  fotosMaterial, materialesCompartidos, filasMaterial, nombreSeguro, COLUMNAS_EXCEL, FOTO_TIPO, ordenTipo,
+  fotosMaterial, materialesCompartidos, filasMaterial, nombreSeguro, COLUMNAS_EXCEL, FOTO_TIPO, ordenTipo, textoDescripcion,
 } from './materiales.js';
 import { libroXlsx, XLSX_MIME } from './excel.js';
 import { fichasPorEan } from './ean.js';
@@ -420,7 +420,7 @@ function htmlDeVista() {
 /* ---------- Materiales auxiliares ---------- */
 
 function conTextoTipos(m) {
-  return { ...m, codigo: m.codigo, n: m.n, tiposTexto: resumenTipos(m).map((t) => t.tipo).join(' · ') };
+  return { ...m, codigo: m.codigo, n: m.n, tiposTexto: resumenTipos(m).map((t) => { const d = textoDescripcion(m, t.tipo); return d ? `${t.tipo} ${d}` : t.tipo; }).join(' · ') };
 }
 
 /** Modelo de pantalla de un material: por tipo, marcas y fotos (y la galería del visor). */
@@ -452,7 +452,7 @@ function vistaMaterial(m) {
         foto = { alt: def[1], fotos: conUrl, sinDibujo: porSap.size - conDibujo };
       }
     }
-    tipos.push({ tipo, n: porSap.size, grupos, foto, sinFoto });
+    tipos.push({ tipo, n: porSap.size, grupos, foto, sinFoto, desc: m.descripciones?.get(tipo) || null });
   }
   state.galeriaActual = galeria;
   return tipos;
@@ -486,7 +486,7 @@ function ctxMateriales() {
   const porTipo = new Map();
   for (const x of lista) {
     if (!porTipo.has(x.tipo)) porTipo.set(x.tipo, []);
-    porTipo.get(x.tipo).push({ codigo: x.codigo, n: x.n, marcas: textoMarcas(x.m.tipos.get(x.tipo)) });
+    porTipo.get(x.tipo).push({ codigo: x.codigo, n: x.n, marcas: textoMarcas(x.m.tipos.get(x.tipo)), desc: textoDescripcion(x.m, x.tipo) });
   }
   const grupos = [...porTipo.entries()].sort((a, b) => ordenTipo(a[0]) - ordenTipo(b[0])).map(([tipo, items]) => ({ tipo, items }));
   return { grupos, total: lista.length, totalSinFiltro, q: state.qM, tipo: state.tipoM, tipos, todos: state.matTodos };
@@ -695,11 +695,11 @@ function exportarMaterial(codigo, boton) {
   const m = state.mat && materialExacto(state.mat, codigo, { minimo: 1 });
   if (!m) return null;
   const filas = filasMaterial(m, state.etMarca);
-  const tipos = resumenTipos(m).map((t) => t.tipo).join(', ');
+  const tipos = resumenTipos(m).map((t) => { const d = textoDescripcion(m, t.tipo); return d ? `${t.tipo} ${d}` : t.tipo; }).join(', ');
   return exportar([{
     nombre: 'Productos',
     titulo: `Material auxiliar ${m.codigo} · ${tipos} · ${m.n} ${m.n === 1 ? 'producto' : 'productos'}`,
-    subtitulo: subtitulo('Una fila por producto y tipo de material. Marca unificada como en los filtros de la app; códigos tal cual en la ficha.'),
+    subtitulo: subtitulo('Una fila por producto y tipo de material. Marca unificada como en los filtros de la app; códigos tal cual en la ficha. Descripción: lo que dice el apartado «Envase y embalaje» de esa ficha (TipoTapón, Asa o Bandeja); vacía si la ficha no la trae.'),
     columnas: COLUMNAS_EXCEL,
     filas,
   }], nombreSeguro('MATERIAL', m.codigo), `Material ${m.codigo}`, enlaceMaterial(m.codigo), boton);
@@ -711,7 +711,7 @@ function exportarCompartidos(boton) {
     const porSap = x.m.tipos.get(x.tipo);
     const campos = [...new Set([...porSap.values()].flatMap((e) => e.campos))].join(', ');
     const marcas = porMarca(porSap, state.etMarca).map((g) => `${g.etiqueta} (${g.items.length})`).join(', ');
-    return [x.tipo, campos, x.codigo, String(x.n), marcas];
+    return [x.tipo, campos, x.codigo, textoDescripcion(x.m, x.tipo), String(x.n), marcas];
   });
   const filas = lista.flatMap((x) => filasMaterial(x.m, state.etMarca, x.tipo));
   const filtro = [state.tipoM && `tipo ${state.tipoM}`, state.qM && `filtro «${state.qM}»`].filter(Boolean).join(', ');
@@ -722,7 +722,7 @@ function exportarCompartidos(boton) {
       nombre: 'Resumen',
       titulo: `${que} · ${lista.length} códigos${filtro ? ` · ${filtro}` : ''}`,
       subtitulo: subtitulo('Una fila por código y tipo de material, ordenadas por número de productos.'),
-      columnas: [['Tipo de material', 18], ['Campos de la ficha', 26], ['Código', 18], ['Nº de productos', 14], ['Marcas', 70]],
+      columnas: [['Tipo de material', 18], ['Campos de la ficha', 26], ['Código', 18], ['Descripción (envase y embalaje)', 34], ['Nº de productos', 14], ['Marcas', 70]],
       filas: resumen,
     },
     {
@@ -977,6 +977,12 @@ async function copiar(texto) {
 
 function aplicarPaquete(paquete) {
   state.doc = paquete.doc;
+  // Las correcciones con OK de Jorge (incidencia 'corregida_con_ok') no son incidencias del PDF: van aparte.
+  for (const p of state.doc?.productos || []) {
+    const incs = p.incidencias || [];
+    p.correcciones = incs.filter((i) => i.tipo === 'corregida_con_ok');
+    if (p.correcciones.length) p.incidencias = incs.filter((i) => i.tipo !== 'corregida_con_ok');
+  }
   if (state.doc && paquete.cambios && state.doc.cambios == null) state.doc.cambios = paquete.cambios;
   state.imagenes = paquete.imagenes;
   state.blob = paquete.blob;
@@ -1082,6 +1088,7 @@ function vistaAct() {
     ocupado: act.ocupado,
     informe: act.informe,
     pideClaveApp: !claveAplicacion,
+    enApp: Boolean(window.FichasAndroid),
   };
 }
 
@@ -1213,8 +1220,20 @@ async function onAcceso(fd) {
   pintarAct();
 }
 
+/** Mensaje de fallo con el paso concreto, para saber dónde se ha parado (sin token ni contraseñas). */
+function textoFalloAct(err, paso) {
+  const msg = sanear(err?.message || '', acceso?.token);
+  let causa = msg;
+  if (err?.status === 401 || err?.status === 403) causa = 'GitHub no acepta el acceso (la clave de actualización o su token no valen o han caducado).';
+  else if (err?.status === 409 || err?.code === 'en-curso') causa = msg || 'Ya hay una actualización en curso.';
+  else if (/failed to fetch|networkerror|load failed|network/i.test(msg)) causa = 'Se ha cortado la conexión (los dos PDF cifrados son unos 14 MB). Prueba con wifi o con el PC.';
+  else if (/memory|allocation|quota/i.test(msg)) causa = 'El dispositivo se ha quedado sin memoria al cifrar los PDF. Prueba desde el PC.';
+  return `No se ha podido ${paso}. ${causa || 'Error desconocido.'}`.trim();
+}
+
 async function onPdfs(form) {
   const gen = ++actGeneracion;
+  let paso = 'comprobar la contraseña';
   act.ocupado = true;
   act.error = '';
   pintarAct();
@@ -1231,6 +1250,7 @@ async function onPdfs(form) {
         return;
       }
     }
+    paso = 'leer los PDF';
     const archivos = await leerPdfs(form.querySelector('#pdfs').files);
     act.solicitud = nuevaSolicitud();
     act.desde = new Date().toISOString();
@@ -1240,7 +1260,9 @@ async function onPdfs(form) {
     guardarAct();
     pintarAct();
     const gh = clienteAct();
+    paso = 'cifrar y subir los PDF';
     await subirRevision(gh, { password: claveAplicacion, archivos, solicitud: act.solicitud });
+    paso = 'seguir la revisión';
     if (gen !== actGeneracion) return;
     act.fase = 'revisando';
     act.texto = 'Revisando las fichas.';
@@ -1251,7 +1273,7 @@ async function onPdfs(form) {
     if (gen !== actGeneracion) return;
     act.ocupado = false;
     act.fase = 'error';
-    act.error = sanear(err?.message || 'No se han podido enviar los PDF.', acceso?.token);
+    act.error = textoFalloAct(err, paso);
     act.runUrl = err?.runUrl || '';
     guardarAct();
     pintarAct();
@@ -1508,6 +1530,19 @@ function onClick(ev) {
   const act = ev.target.closest('[data-act]');
   if (act) {
     const tipo = act.dataset.act;
+    if (tipo === 'ver-clave') {
+      ev.preventDefault();
+      const campo = document.getElementById(act.getAttribute('aria-controls'));
+      if (!campo) return;
+      const ver = campo.type === 'password';
+      campo.type = ver ? 'text' : 'password';
+      act.setAttribute('aria-pressed', String(ver));
+      const rotulo = ver ? 'Ocultar contraseña' : 'Mostrar contraseña';
+      act.setAttribute('aria-label', rotulo);
+      act.title = rotulo;
+      campo.focus({ preventScroll: true });
+      return;
+    }
     if (tipo === 'sug') {
       ev.preventDefault();
       abrirMaterial(act.dataset.codigo);

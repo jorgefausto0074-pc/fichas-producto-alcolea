@@ -215,7 +215,13 @@ export function htmlLogin({ error = '', ocupado = false, fecha = '', destino = '
       ${destino ? `<p class="fecha-datos">Al entrar se abrirá la ficha SAP ${esc(destino)}.</p>` : ''}
       <form id="login-form">
         <label for="clave">Contraseña</label>
-        <input id="clave" name="clave" type="password" autocomplete="current-password" placeholder="••••••••" required ${ocupado ? 'disabled' : ''} autofocus>
+        <div class="campo-clave">
+          <input id="clave" name="clave" type="password" autocomplete="current-password" placeholder="••••••••" required ${ocupado ? 'disabled' : ''} autofocus>
+          <button type="button" class="ver-clave" data-act="ver-clave" aria-controls="clave" aria-pressed="false" aria-label="Mostrar contraseña" title="Mostrar contraseña" ${ocupado ? 'disabled' : ''}>
+            <svg class="ojo-abierto" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path d="M1.5 12S5.5 4.5 12 4.5 22.5 12 22.5 12 18.5 19.5 12 19.5 1.5 12 1.5 12Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            <svg class="ojo-cerrado" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 4.5C18.5 4.5 22.5 12 22.5 12a17.6 17.6 0 0 1-3.2 4.2M6.6 6.6C3.4 8.6 1.5 12 1.5 12S5.5 19.5 12 19.5c1.9 0 3.6-.6 5-1.5M9.9 9.9a3.2 3.2 0 0 0 4.2 4.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
         <label class="check"><input type="checkbox" name="recordar" ${ocupado ? 'disabled' : ''}> Recordar en este dispositivo</label>
         <button class="btn btn-primary" type="submit" ${ocupado ? 'disabled aria-busy="true"' : ''}>${ocupado ? 'Abriendo las fichas…' : 'Entrar'}</button>
         <p class="error" role="alert">${esc(error)}</p>
@@ -268,7 +274,7 @@ export function htmlShell({ fecha }) {
       <img class="pie-r" src="img/marca2026/refresco-r-naranja.png" alt="" aria-hidden="true">
       <p><strong>Refresco Iberia</strong> · Planta Alcolea</p>
       <p>Fichas de producto terminado · Coordinación de Calidad</p>
-      <p>Jorge Quezada Ortega · Coordinador de Calidad</p>
+      <p>Jorge Quesada Ortega · Coordinador de Calidad</p>
       <p>Datos del ${esc(fecha)}. Los valores se muestran tal cual en el PDF de origen.</p>
       <p><a class="enlace-discreto" href="?vista=actualizar" data-go="actualizar">Actualizar fichas</a></p>
       <p class="pie-tagline">The agile beverage solutions partner.</p>
@@ -424,14 +430,14 @@ function htmlDiseno(p, vacios) {
 
 function htmlGaleria(galeria) {
   if (!galeria.length) {
-    return seccion('Imágenes de la página 2', 'image', '<p class="vacio">Esta ficha no trae dibujos.</p>', { open: true });
+    return seccion('Imágenes del producto', 'image', '<p class="vacio">Esta ficha no trae dibujos.</p>', { open: true });
   }
   const grid = `<div class="galeria">${galeria.map((g, i) => `
     <button type="button" class="gal-item" data-act="lb" data-i="${i}">
       <img src="${esc(g.url)}" alt="${esc(g.alt)}" width="${Number(g.ancho) || ''}" height="${Number(g.alto) || ''}" data-hash="${esc(g.hash || '')}">
       <span>${esc(g.alt)}</span>
     </button>`).join('')}</div>`;
-  return seccion('Imágenes de la página 2', 'image', `<p class="nota">Dibujos recortados de la página 2. Pulsa para ampliar.</p>${grid}`, {
+  return seccion('Imágenes del producto', 'image', `<p class="nota">Dibujos recortados de la página 2 de la ficha. Pulsa para ampliar.</p>${grid}`, {
     open: true,
     cuenta: String(galeria.length),
   });
@@ -500,6 +506,10 @@ export function htmlProducto({ p, hermanos, galeria, vacios, enComparar, favorit
         <ul>${incs.map((i) => `<li><b>${esc(TIPO_INC[i.tipo] || i.tipo)}</b> · ${esc(i.campo)} · ${esc(i.detalle)}</li>`).join('')}</ul>
       </div>
     </aside>` : '';
+  const corr = p.correcciones || [];
+  const corregidas = corr.length ? `<aside class="nota-corr" role="note"><strong>Corregido con OK de Calidad</strong><ul>${
+    corr.map((i) => `<li>${esc(i.campo === 'diseno.botella_tipo' ? 'Diseño botella · Tipo' : i.campo)}: el PDF dice «${esc(i.valor_pdf)}» y aquí se muestra «${esc(i.valor_corregido)}».</li>`).join('')
+  }</ul></aside>` : '';
   const gEs = esCodigoG(p.sap_mezcla);
   const cabeceraPares = [
     ...CABECERA.map(([k, lab]) => [lab, p[k]]),
@@ -540,13 +550,14 @@ export function htmlProducto({ p, hermanos, galeria, vacios, enComparar, favorit
         <button type="button" class="btn btn-ghost light" data-act="vacios" aria-pressed="${vacios ? 'true' : 'false'}">${vacios ? 'Ocultar vacíos' : 'Mostrar vacíos'}</button>
       </div>
     </header>
+    ${corregidas}
+    ${htmlGaleria(galeria)}
     ${seccion('Cabecera', 'info', `${htmlKv(cabeceraPares, vacios)}<p class="nota">Consumo preferente: el PDF no indica la unidad. Por los valores, lo habitual es que sean días. El número de arriba no se ha modificado.</p>`, { open: true })}
     ${seccion('Envase y embalaje', 'bottle', htmlKv(ENVASE.map(([k, lab]) => [lab, p[k]]), vacios), { open: true })}
     ${htmlPalet(p)}
     ${TABLAS.map((t) => htmlTabla(p, t, vacios)).join('')}
     ${seccion('Observaciones', 'info', `${notasInc(incsDe(incs, 'observaciones'))}${p.observaciones ? `<blockquote>${esc(p.observaciones)}</blockquote>` : '<p class="vacio">Sin observaciones.</p>'}`, { open: Boolean(p.observaciones) })}
     ${htmlDiseno(p, vacios)}
-    ${htmlGaleria(galeria)}
     ${htmlHermanos(p, hermanos)}
     ${seccion('Control y origen', 'gear', htmlKv([
       ['Grupo en el paquete', p.grupo_pdf],
@@ -803,6 +814,7 @@ export function htmlActualizar(m) {
       <p class="lead">Elige uno o dos PDF del informe de Access: asépticos, no asépticos, o los dos. Se cifran en este dispositivo y no se suben en claro.</p>
       <form id="form-pdfs">
         ${m.pideClaveApp ? `<label for="clave-app">Contraseña de la aplicación</label><input id="clave-app" name="clave-app" type="password" autocomplete="current-password" required><p class="hint">Hace falta para cifrar los PDF. No se guarda.</p>` : ''}
+        ${m.enApp ? `<p class="aviso-app" role="note"><strong>Desde la app Android no se pueden elegir PDF.</strong> La app no abre el selector de archivos. Hazlo desde Chrome del móvil o desde el PC en jorgefausto0074-pc.github.io/fichas-producto-alcolea (menú «Actualizar fichas»).</p>` : ''}
         <label for="pdfs">PDF</label>
         <input id="pdfs" name="pdfs" type="file" accept="application/pdf,.pdf" multiple required>
         <div class="acciones">
@@ -976,7 +988,8 @@ function htmlTipoMaterial(t, h) {
       </a></li>`).join('')}</ul>
     </div>`).join('');
   return `<section class="panel mat-tipo">
-      <div class="panel-h"><h${h}>${esc(t.tipo)} <span class="mat-n">${plural(t.n, 'producto', 'productos')}</span></h${h}><span class="nota">${plural(t.grupos.length, 'marca', 'marcas')}</span></div>
+      <div class="panel-h"><h${h}>${esc(t.tipo)}${t.desc ? ` <span class="mat-desc">${esc(t.desc.texto)}</span>` : ''} <span class="mat-n">${plural(t.n, 'producto', 'productos')}</span></h${h}><span class="nota">${plural(t.grupos.length, 'marca', 'marcas')}</span></div>
+      ${htmlDescMaterial(t)}
       <div class="mat-cuerpo">
         ${htmlFotoMaterial(t)}
         <div class="mat-marcas">${marcas}</div>
@@ -984,10 +997,21 @@ function htmlTipoMaterial(t, h) {
     </section>`;
 }
 
+/** Origen de la descripción y variantes (cuando las fichas no escriben lo mismo). */
+function htmlDescMaterial(t) {
+  const d = t.desc;
+  if (!d) return '';
+  const origen = `Según «${esc(d.fuente)}» del apartado Envase y embalaje${d.total < t.n ? ` (${d.total} de ${t.n} fichas lo indican)` : ''}.`;
+  const vars = d.variantes.length
+    ? ` Variantes: ${d.variantes.map((v) => `«${esc(v.texto)}» en ${plural(v.n, 'ficha', 'fichas')}`).join(', ')}; la principal, en ${plural(d.n, 'ficha', 'fichas')}.`
+    : '';
+  return `<p class="nota mat-desc-nota">${origen}${vars}</p>`;
+}
+
 /** Resultado de un código de material. enLinea: dentro de la búsqueda (h2) o pantalla propia (h1). */
 export function htmlMaterial({ codigo, m, tipos, enLinea = false }) {
   if (!m) {
-    return `<section><p class="kicker">Material auxiliar</p><h1>No está ${esc(codigo)}</h1><p class="lead">Ninguna ficha tiene ese código en tapón, etiqueta, bandeja, retráctil, separador, asa ni etiquetas de caja o palet.</p><p><a href="?vista=materiales">Ver los materiales compartidos</a></p></section>`;
+    return `<section><p class="kicker">Material auxiliar</p><h1>No está ${esc(codigo)}</h1><p class="lead">Ninguna ficha tiene ese código en tapón, etiqueta, bandeja, retráctil, separador, asa ni etiquetas de caja o palet. Las preformas no tienen código SAP en las fichas (solo peso y color).</p><p><a href="?vista=materiales">Ver los materiales compartidos</a></p></section>`;
   }
   const h = enLinea ? 2 : 1;
   const resumen = tipos.map((t) => `${t.tipo} ${t.n}`).join(' · ');
@@ -1035,7 +1059,7 @@ export function htmlMateriales({ grupos, total, totalSinFiltro, q, tipo, tipos, 
     .concat(tipos.map(([t, n]) => `<button type="button" class="chip${tipo === t ? ' is-on' : ''}" data-act="tipo-mat" data-v="${esc(t)}" aria-pressed="${tipo === t}">${esc(t)}<span>${n}</span></button>`)).join('');
   const bloques = grupos.map((g) => `<section class="panel">
       <div class="panel-h"><h2>${esc(g.tipo)} <span class="mat-n">${plural(g.items.length, 'código', 'códigos')}</span></h2></div>
-      <div class="g-list">${g.items.map((x) => `<a class="g-item" href="?mat=${encodeURIComponent(x.codigo)}"><strong>${esc(x.codigo)}</strong><span>${plural(x.n, 'producto', 'productos')}</span><em>${esc(x.marcas)}</em></a>`).join('')}</div>
+      <div class="g-list">${g.items.map((x) => `<a class="g-item" href="?mat=${encodeURIComponent(x.codigo)}"><strong>${esc(x.codigo)}${x.desc ? ` <span class="mat-desc">${esc(x.desc)}</span>` : ''}</strong><span>${plural(x.n, 'producto', 'productos')}</span><em>${esc(x.marcas)}</em></a>`).join('')}</div>
     </section>`).join('');
   return `<section class="materiales">
     <p class="kicker">${icono('box')} Materiales auxiliares</p>

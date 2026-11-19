@@ -25,6 +25,43 @@ export const CAMPOS_MATERIAL = [
   ['cluster_version', 'Cluster', 'Versión cluster'],
 ];
 
+/**
+ * Descripción de cada código según el apartado «Envase y embalaje» (página 1) de la misma ficha.
+ * [campo de p.diseno, campo de la página 1 que lo describe]. Solo la 1ª casilla del tapón: la 2ª es otro
+ * código y la ficha solo trae un «TipoTapón». Etiquetas, retráctil, palet… no tienen descripción en la ficha.
+ */
+export const DESCRIPCION_CAMPO = {
+  tapon_sap: 'tipo_tapon',
+  asa_n: 'asa',
+  bandeja_version: 'bandeja',
+  bandeja_version_casilla_2: 'bandeja',
+  bandeja_ean: 'bandeja',
+};
+/** Rótulo del campo de la página 1 de donde sale la descripción. */
+export const ROTULO_DESCRIPCION = { tipo_tapon: 'TipoTapón', asa: 'Asa', bandeja: 'Bandeja' };
+/** Asa con su código SAP escrito dentro de «Asa:» (p. ej. «Decorada - SAP: 4006272»). */
+const RE_SAP_ASA = /\b(400\d{4})\b/g;
+const ROTULO_SAP_ASA = 'SAP asa (en «Asa:» de envase)';
+
+/** Texto descriptivo útil: sin vacíos, guiones ni «Sí»/«No». */
+export function descripcionUtil(v) {
+  const s = valorMaterial(v);
+  if (!s || /^(s[ií]|no)$/i.test(s)) return '';
+  return s;
+}
+
+/** Descripción de un código en una ficha concreta (o '' si la ficha no la trae). */
+export function descripcionEnFicha(p, campos) {
+  for (const c of campos) {
+    if (c === ROTULO_SAP_ASA) return descripcionUtil(p.asa);
+    const campo = CAMPO_POR_ROTULO.get(c);
+    const fuente = campo && DESCRIPCION_CAMPO[campo];
+    const d = fuente ? descripcionUtil(p[fuente]) : '';
+    if (d) return d;
+  }
+  return '';
+}
+
 export const TIPOS_MATERIAL = ['Tapón', 'Etiqueta', 'Bandeja', 'Retráctil', 'Separador', 'Asa', 'Etiqueta de palet', 'Etiqueta de caja', 'Cluster'];
 
 /** Casilla de imagen de la página 2 que dibuja cada tipo. Separador y cluster no traen dibujo. */
@@ -37,6 +74,8 @@ export const FOTO_TIPO = {
   'Etiqueta de palet': ['etiqueta_palet', 'Etiqueta palet'],
   'Etiqueta de caja': ['etiqueta_caja', 'Etiqueta caja'],
 };
+
+const CAMPO_POR_ROTULO = new Map(CAMPOS_MATERIAL.map(([campo, , rotulo]) => [rotulo, campo]));
 
 const ORDEN_TIPO = new Map(TIPOS_MATERIAL.map((t, i) => [t, i]));
 export const ordenTipo = (t) => ORDEN_TIPO.get(t) ?? 99;
@@ -59,8 +98,9 @@ export function indexarMateriales(productos) {
   const idx = new Map();
   for (const p of productos) {
     const d = p.diseno || {};
-    for (const [campo, tipo, rotulo] of CAMPOS_MATERIAL) {
-      const codigo = valorMaterial(d[campo]);
+    const entradas = CAMPOS_MATERIAL.map(([campo, tipo, rotulo]) => [valorMaterial(d[campo]), tipo, rotulo]);
+    for (const [, sapAsa] of String(p.asa || '').matchAll(RE_SAP_ASA)) entradas.push([sapAsa, 'Asa', ROTULO_SAP_ASA]);
+    for (const [codigo, tipo, rotulo] of entradas) {
       if (!codigo) continue;
       let m = idx.get(codigo);
       if (!m) {
@@ -78,12 +118,46 @@ export function indexarMateriales(productos) {
   const porClave = new Map();
   for (const m of idx.values()) {
     m.n = m.saps.size;
+    m.descripciones = new Map();
+    for (const [tipo, porSap] of m.tipos) {
+      const d = describir(porSap);
+      if (d) m.descripciones.set(tipo, d);
+    }
     m.tipos = new Map([...m.tipos.entries()].sort((a, b) => ordenTipo(a[0]) - ordenTipo(b[0])));
     if (!porClave.has(m.clave)) porClave.set(m.clave, m);
     const sc = sinCeros(m.clave);
     if (sc !== m.clave && !porClave.has(sc)) porClave.set(sc, m);
   }
   return { porCodigo: idx, porClave, lista: [...idx.values()] };
+}
+
+/**
+ * Descripción de un código dentro de un tipo: la más frecuente entre sus fichas y las variantes.
+ * { texto, n, total, variantes: [{ texto, n }], fuente } o null si ninguna ficha la trae. No se inventa nada.
+ */
+export function describir(porSap) {
+  const cuenta = new Map();
+  let fuente = '';
+  for (const e of porSap.values()) {
+    const t = descripcionEnFicha(e.p, e.campos);
+    if (!t) continue;
+    cuenta.set(t, (cuenta.get(t) || 0) + 1);
+    if (!fuente) {
+      const c = e.campos.find((x) => x === ROTULO_SAP_ASA || DESCRIPCION_CAMPO[CAMPO_POR_ROTULO.get(x)]);
+      fuente = c === ROTULO_SAP_ASA ? 'Asa' : ROTULO_DESCRIPCION[DESCRIPCION_CAMPO[CAMPO_POR_ROTULO.get(c)]] || '';
+    }
+  }
+  if (!cuenta.size) return null;
+  const orden = [...cuenta.entries()].map(([texto, n]) => ({ texto, n }))
+    .sort((a, b) => b.n - a.n || a.texto.localeCompare(b.texto, 'es'));
+  return { texto: orden[0].texto, n: orden[0].n, total: [...cuenta.values()].reduce((a, b) => a + b, 0), variantes: orden.slice(1), fuente };
+}
+
+/** «Tapón · AMARILLO ANONIMO» para listas cortas (sugerencias, materiales compartidos). */
+export function textoDescripcion(m, tipo) {
+  const d = m.descripciones?.get(tipo);
+  if (!d) return '';
+  return d.variantes.length ? `${d.texto} (+${d.variantes.length} variante${d.variantes.length === 1 ? '' : 's'})` : d.texto;
 }
 
 /** Material exacto para una consulta (sin espacios ni signos, y tolera ceros a la izquierda). */
@@ -166,7 +240,7 @@ export function materialesCompartidos(ix, minimo = 2) {
 
 export const COLUMNAS_EXCEL = [
   ['Tipo de material', 18], ['Campo de la ficha', 20], ['Código', 18], ['Marca', 22], ['SAP', 11],
-  ['Producto', 52], ['Formato', 14], ['Familia', 22], ['Grupo', 14],
+  ['Producto', 52], ['Formato', 14], ['Familia', 22], ['Grupo', 14], ['Descripción (envase y embalaje)', 34],
 ];
 
 /** Filas del Excel: una por producto y tipo, en el mismo orden que la pantalla. */
@@ -177,7 +251,7 @@ export function filasMaterial(m, etiquetas, soloTipo = '') {
     for (const g of porMarca(porSap, etiquetas)) {
       for (const e of g.items) {
         const p = e.p;
-        filas.push([tipo, e.campos.join(', '), m.codigo, g.etiqueta, p.codigo_sap, p.producto || '', p.formato || '', p.familia_derivada || '', etiquetaGrupo(p.grupo_pdf)]);
+        filas.push([tipo, e.campos.join(', '), m.codigo, g.etiqueta, p.codigo_sap, p.producto || '', p.formato || '', p.familia_derivada || '', etiquetaGrupo(p.grupo_pdf), descripcionEnFicha(p, e.campos)]);
       }
     }
   }
