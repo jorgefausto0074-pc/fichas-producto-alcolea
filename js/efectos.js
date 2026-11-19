@@ -26,19 +26,80 @@ function portada() {
 addEventListener('scroll', portada, { passive: true });
 addEventListener('resize', () => { alturaTop(); portada(); });
 
-/* ---------- Carrusel: punto activo ---------- */
+/* ---------- Carrusel: flechas, puntos, teclado y arrastre con ratón (el táctil usa el scroll nativo) ---------- */
 function carrusel(root) {
   root.querySelectorAll('.galeria').forEach((gal) => {
-    const puntos = gal.nextElementSibling?.classList.contains('gal-puntos') ? [...gal.nextElementSibling.children] : null;
-    if (!puntos) return;
+    const wrap = gal.closest('.gal-wrap') || gal.parentElement;
+    const puntosBox = wrap.nextElementSibling?.classList.contains('gal-puntos') ? wrap.nextElementSibling : null;
+    const puntos = puntosBox ? [...puntosBox.querySelectorAll('[data-gal-ir]')] : [];
     const items = [...gal.querySelectorAll('.gal-item')];
-    const io = new IntersectionObserver((es) => {
-      for (const e of es) if (e.intersectionRatio > 0.6) {
-        const i = items.indexOf(e.target);
-        puntos.forEach((d, k) => d.classList.toggle('is-on', k === i));
-      }
-    }, { root: gal, threshold: [0.6] });
-    items.forEach((it) => io.observe(it));
+    if (items.length < 2) return;
+    let actual = 0;
+    const marcar = (i) => {
+      actual = i;
+      gal.dataset.i = String(i);
+      puntos.forEach((d, k) => { d.classList.toggle('is-on', k === i); if (k === i) d.setAttribute('aria-current', 'true'); else d.removeAttribute('aria-current'); });
+    };
+    let objetivo = null;
+    const ir = (i) => {
+      const n = Math.max(0, Math.min(items.length - 1, i));
+      objetivo = n;
+      const it = items[n];
+      const left = Math.max(0, Math.min(gal.scrollWidth - gal.clientWidth, it.offsetLeft - gal.offsetLeft - (gal.clientWidth - it.offsetWidth) / 2));
+      if (Math.abs(left - gal.scrollLeft) < 2) objetivo = null; // ya está ahí: no habrá evento scroll
+      else gal.scrollTo({ left, behavior: reducido() ? 'auto' : 'smooth' });
+      marcar(n);
+    };
+    const cercano = () => {
+      const centro = gal.scrollLeft + gal.clientWidth / 2;
+      let mejor = 0; let d = Infinity;
+      items.forEach((it, k) => { const c = it.offsetLeft - gal.offsetLeft + it.offsetWidth / 2; if (Math.abs(c - centro) < d) { d = Math.abs(c - centro); mejor = k; } });
+      return mejor;
+    };
+    // Punto activo: el destino pedido (flechas, puntos, teclado, arrastre) o, si se desliza a mano, la foto más centrada.
+    let fin = 0;
+    gal.addEventListener('scroll', () => {
+      clearTimeout(fin);
+      fin = setTimeout(() => {
+        if (arrastre) return;
+        if (objetivo != null) { marcar(objetivo); objetivo = null; } else marcar(cercano());
+      }, 140);
+    }, { passive: true });
+    wrap.querySelectorAll('[data-gal-mover]').forEach((b) => b.addEventListener('click', (e) => { e.preventDefault(); ir(actual + Number(b.dataset.galMover)); }));
+    puntos.forEach((b) => b.addEventListener('click', (e) => { e.preventDefault(); ir(Number(b.dataset.galIr)); }));
+    gal.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') { e.preventDefault(); ir(actual + 1); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); ir(actual - 1); }
+    });
+    // Arrastre con ratón: el scroll nativo solo responde al táctil.
+    let arrastre = null;
+    let bloquearClic = false;
+    gal.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse' || e.button !== 0) return;
+      arrastre = { x: e.clientX, left: gal.scrollLeft, movido: false, id: e.pointerId };
+    });
+    gal.addEventListener('pointermove', (e) => {
+      if (!arrastre || e.pointerId !== arrastre.id) return;
+      const dx = e.clientX - arrastre.x;
+      if (!arrastre.movido && Math.abs(dx) < 6) return;
+      if (!arrastre.movido) { arrastre.movido = true; gal.setPointerCapture(e.pointerId); gal.classList.add('is-arrastre'); }
+      gal.scrollLeft = arrastre.left - dx;
+    });
+    const soltar = (e) => {
+      if (!arrastre || e.pointerId !== arrastre.id) return;
+      const { movido, x } = arrastre;
+      arrastre = null;
+      gal.classList.remove('is-arrastre');
+      if (!movido) return; // clic sin arrastrar: abre el visor como siempre
+      bloquearClic = true;
+      setTimeout(() => { bloquearClic = false; }, 0);
+      const dx = e.clientX - x;
+      const base = cercano();
+      ir(Math.abs(dx) > 50 && base === actual ? actual + (dx < 0 ? 1 : -1) : base);
+    };
+    gal.addEventListener('pointerup', soltar);
+    gal.addEventListener('pointercancel', soltar);
+    gal.addEventListener('click', (e) => { if (bloquearClic) { e.stopPropagation(); e.preventDefault(); bloquearClic = false; } }, true);
   });
 }
 

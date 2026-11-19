@@ -340,8 +340,11 @@ export function htmlInicio({ fechaHumana, bruto, stats, formatos, familias, marc
 
 export function htmlBuscar(ctx) {
   const { filtros, formatos, familias, marcas, nInc } = ctx;
+  // Resultados primero; la búsqueda y los filtros quedan debajo (petición de Jorge, 19/11/2026).
   return `<section class="buscar">
-    <h1>Búsqueda</h1>
+    <h1 class="sr">Búsqueda: resultados</h1>
+    <div id="resultados">${htmlResultados(ctx)}</div>
+    <h2 class="buscar-filtros-h">Búsqueda y filtros</h2>
     <div class="filtros">
       <div class="chip-row">
         <span class="chip-label" id="lab-grupo">Grupo</span>
@@ -356,7 +359,6 @@ export function htmlBuscar(ctx) {
       ${filaChips('Familia', 'familia', familias, filtros.familia)}
       ${filaChips('Marca', 'marca', marcas, filtros.marca)}
     </div>
-    <div id="resultados">${htmlResultados(ctx)}</div>
   </section>`;
 }
 
@@ -417,13 +419,15 @@ function htmlGaleria(galeria) {
   if (!galeria.length) {
     return seccion('Imágenes del producto', 'image', '<p class="vacio">Esta ficha no trae dibujos.</p>', { open: true });
   }
-  const puntos = galeria.length > 1 ? `<div class="gal-puntos" aria-hidden="true">${galeria.map((_, i) => `<i${i ? '' : ' class="is-on"'}></i>`).join('')}</div>` : '';
-  const grid = `<div class="galeria" tabindex="0" aria-label="Imágenes del producto: desliza para ver más">${galeria.map((g, i) => `
+  const varias = galeria.length > 1;
+  const puntos = varias ? `<div class="gal-puntos">${galeria.map((g, i) => `<button type="button" data-gal-ir="${i}"${i ? '' : ' class="is-on" aria-current="true"'} aria-label="Ver ${esc(g.alt)} (${i + 1} de ${galeria.length})"><i></i></button>`).join('')}</div>` : '';
+  const flechas = varias ? `<button type="button" class="gal-flecha gal-prev" data-gal-mover="-1" aria-label="Imagen anterior">‹</button><button type="button" class="gal-flecha gal-next" data-gal-mover="1" aria-label="Imagen siguiente">›</button>` : '';
+  const grid = `<div class="gal-wrap"><div class="galeria" tabindex="0" aria-label="Imágenes del producto: usa las flechas, arrastra o desliza para ver más">${galeria.map((g, i) => `
     <button type="button" class="gal-item" data-act="lb" data-i="${i}">
-      <img src="${esc(g.url)}" alt="${esc(g.alt)}" width="${Number(g.ancho) || ''}" height="${Number(g.alto) || ''}" data-hash="${esc(g.hash || '')}">
+      <img draggable="false" src="${esc(g.url)}" alt="${esc(g.alt)}" width="${Number(g.ancho) || ''}" height="${Number(g.alto) || ''}" data-hash="${esc(g.hash || '')}">
       <span>${esc(g.alt)}</span>
-    </button>`).join('')}</div>${puntos}`;
-  return seccion('Imágenes del producto', 'image', `<p class="nota">Dibujos recortados de la página 2 de la ficha. Desliza para ver más y pulsa para ampliar.</p>${grid}`, {
+    </button>`).join('')}</div>${flechas}</div>${puntos}`;
+  return seccion('Imágenes del producto', 'image', `<p class="nota">Dibujos recortados de la página 2 de la ficha. Usa ‹ ›, arrastra o desliza para ver más; pulsa una imagen para ampliarla.</p>${grid}`, {
     open: true,
     cuenta: String(galeria.length),
   });
