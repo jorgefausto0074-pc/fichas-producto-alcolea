@@ -20,6 +20,7 @@ import android.print.PrintManager;
 import android.webkit.CookieManager;
 import android.webkit.PermissionRequest;
 import android.webkit.URLUtil;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -28,6 +29,8 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 import androidx.activity.OnBackPressedCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -84,6 +87,26 @@ public class MainActivity extends AppCompatActivity {
                     + "})();";
 
     private WebView webView;
+    /** Desde v1.2.0: selector de archivos para <input type="file"> (PDF de «Actualizar fichas»). */
+    private ValueCallback<Uri[]> callbackArchivos;
+    private final ActivityResultLauncher<Intent> elegirArchivos =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), resultado -> {
+                ValueCallback<Uri[]> cb = callbackArchivos;
+                callbackArchivos = null;
+                if (cb == null) return;
+                Uri[] uris = null;
+                Intent datos = resultado.getData();
+                if (resultado.getResultCode() == RESULT_OK && datos != null) {
+                    ClipData clip = datos.getClipData();
+                    if (clip != null && clip.getItemCount() > 0) {
+                        uris = new Uri[clip.getItemCount()];
+                        for (int i = 0; i < clip.getItemCount(); i++) uris[i] = clip.getItemAt(i).getUri();
+                    } else if (datos.getData() != null) {
+                        uris = new Uri[] { datos.getData() };
+                    }
+                }
+                cb.onReceiveValue(uris); // null si se cancela: la web puede volver a abrir el selector
+            });
     private PermissionRequest pendingWebPermission;
     private OnBackPressedCallback atras;
     private volatile int profundidadHistorial;
@@ -197,6 +220,27 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPermissionRequest(PermissionRequest request) {
                 runOnUiThread(() -> resolverPermisoWeb(request));
+            }
+
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
+                if (callbackArchivos != null) callbackArchivos.onReceiveValue(null);
+                callbackArchivos = callback;
+                Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("application/pdf");
+                intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[] { "application/pdf" });
+                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,
+                        params == null || params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
+                try {
+                    elegirArchivos.launch(Intent.createChooser(intent, "Elegir PDF de fichas"));
+                    return true;
+                } catch (Exception e) {
+                    callbackArchivos = null;
+                    callback.onReceiveValue(null);
+                    Toast.makeText(MainActivity.this, "No se ha podido abrir el selector de archivos.", Toast.LENGTH_LONG).show();
+                    return true;
+                }
             }
         });
 
