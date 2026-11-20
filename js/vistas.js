@@ -906,13 +906,20 @@ export function htmlResultadoEan({ codigo, productosLista }) {
 }
 
 export function htmlEscaner() {
-  return `<div class="scan" role="dialog" aria-modal="true" aria-label="Escanear código de barras">
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  return `<div class="scan${ios ? ' scan-ios' : ''}" role="dialog" aria-modal="true" aria-label="Escanear código de barras">
     <div class="scan-bar">
       <p>Apunta al código de barras de la botella o de la caja.</p>
       <button type="button" class="btn btn-ghost" data-act="cerrar-escaner">Cerrar</button>
     </div>
-    <video class="scan-video" autoplay playsinline muted></video>
-    <p class="scan-estado" role="status"></p>
+    <div class="scan-marco">
+      <video class="scan-video" autoplay playsinline muted></video>
+      <div class="scan-guia" aria-hidden="true"></div>
+    </div>
+    <p class="scan-estado" role="status" aria-live="polite"></p>
+    <label class="btn ${ios ? 'btn-primary' : 'btn-secondary'} scan-foto">Hacer foto del código
+      <input class="scan-foto-in" type="file" accept="image/*" capture="environment" hidden>
+    </label>
   </div>`;
 }
 

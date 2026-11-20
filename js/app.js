@@ -17,7 +17,7 @@ import {
 } from './materiales.js';
 import { libroXlsx, XLSX_MIME } from './excel.js';
 import { fichasPorEan } from './ean.js';
-import { decodificarCanvas } from './escaner.js';
+import { decodificarCanvas, decodificarArchivo, hayLectorNativo, lectorZxing } from './escaner.js';
 import {
   favoritos, toggleFavorito, limpiarFavoritos, recientes, anotarReciente,
   limpiarRecientes, fijarPlanta, aplicarPlantaGuardada, esFavorito,
@@ -2002,14 +2002,65 @@ function copiarAnalisis() {
 
 let escaneo = null;
 
+const MSG_BUSCANDO = 'Buscando código… coloca el código dentro del recuadro.';
+const MSG_AYUDA = 'Aleja un poco el móvil (unos 20–30 cm) o usa «Hacer foto del código».';
+
+function pararVideo() {
+  if (!escaneo) return;
+  escaneo.parar = true;
+  clearTimeout(escaneo.timer);
+  clearTimeout(escaneo.timerAyuda);
+  clearTimeout(escaneo.timerNegro);
+  escaneo.stream?.getTracks().forEach((pista) => pista.stop());
+}
+
 function cerrarEscaner() {
-  if (escaneo) {
-    escaneo.parar = true;
-    clearTimeout(escaneo.timer);
-    escaneo.stream?.getTracks().forEach((pista) => pista.stop());
-    escaneo = null;
-  }
+  pararVideo();
+  escaneo = null;
   document.getElementById('escaner')?.remove();
+}
+
+async function pedirCamara() {
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+    });
+  } catch (err) {
+    if (err?.name !== 'OverconstrainedError' && err?.name !== 'ConstraintNotSatisfiedError' && err?.name !== 'TypeError') throw err;
+    return navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' } } });
+  }
+}
+
+async function enfoqueContinuo(stream) {
+  try {
+    const pista = stream.getVideoTracks()[0];
+    const capacidades = pista?.getCapabilities?.() || {};
+    if (Array.isArray(capacidades.focusMode) && capacidades.focusMode.includes('continuous')) {
+      await pista.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+    }
+  } catch { /* no todas las cámaras lo permiten */ }
+}
+
+async function leerFotoEscaner(input) {
+  const archivo = input.files?.[0];
+  input.value = '';
+  if (!archivo) return;
+  const capa = document.getElementById('escaner');
+  const estado = capa?.querySelector('.scan-estado');
+  pararVideo();
+  if (estado) estado.textContent = 'Leyendo la foto…';
+  try {
+    const hallado = await decodificarArchivo(archivo);
+    if (hallado?.texto) {
+      cerrarEscaner();
+      aplicarEan(hallado.texto);
+      return;
+    }
+    if (estado) estado.textContent = 'No se ha encontrado código en la foto, prueba otra más cerca y nítida.';
+  } catch {
+    if (estado) estado.textContent = 'No se ha podido leer la foto. Prueba otra vez.';
+  }
 }
 
 async function abrirEscaner() {
@@ -2020,29 +2071,49 @@ async function abrirEscaner() {
   document.body.appendChild(capa);
   const video = capa.querySelector('video');
   const estado = capa.querySelector('.scan-estado');
+  capa.querySelector('.scan-foto-in')?.addEventListener('change', (ev) => leerFotoEscaner(ev.target));
+  escaneo = { stream: null, parar: false, timer: 0, timerAyuda: 0, timerNegro: 0 };
+  const sesion = escaneo;
   if (!navigator.mediaDevices?.getUserMedia) {
-    estado.textContent = 'Este navegador no da acceso a la cámara.';
+    estado.textContent = 'Este navegador no da acceso a la cámara. Usa «Hacer foto del código».';
     return;
   }
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: { ideal: 'environment' } },
-    });
+    const stream = await pedirCamara();
+    if (sesion.parar || escaneo !== sesion) {
+      stream.getTracks().forEach((pista) => pista.stop());
+      return;
+    }
+    sesion.stream = stream;
     video.srcObject = stream;
-    await video.play();
-    const lienzo = document.createElement('canvas');
-    const ctx = lienzo.getContext('2d', { willReadFrequently: true });
-    escaneo = { stream, parar: false, timer: 0 };
+    await video.play().catch(() => {});
+    enfoqueContinuo(stream);
+    if (!hayLectorNativo()) {
+      estado.textContent = 'Cargando lector…';
+      try {
+        await lectorZxing();
+      } catch {
+        estado.textContent = 'No se ha podido cargar el lector de códigos. Revisa la conexión y vuelve a abrir el escáner, o usa «Hacer foto del código».';
+        return;
+      }
+    }
+    if (sesion.parar) return;
+    estado.textContent = MSG_BUSCANDO;
+    sesion.timerAyuda = setTimeout(() => { if (!sesion.parar) estado.textContent = MSG_AYUDA; }, 8000);
+    sesion.timerNegro = setTimeout(() => {
+      if (!sesion.parar && !video.videoWidth) {
+        estado.textContent = 'La cámara no muestra imagen. Cierra y vuelve a abrir el escáner, o usa «Hacer foto del código».';
+      }
+    }, 3000);
+    let vuelta = 0;
     const bucle = async () => {
-      if (!escaneo || escaneo.parar) return;
+      if (sesion.parar) return;
       if (video.readyState >= 2 && video.videoWidth) {
-        lienzo.width = video.videoWidth;
-        lienzo.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0, lienzo.width, lienzo.height);
+        vuelta += 1;
         try {
-          const hallado = await decodificarCanvas(lienzo);
-          if (hallado?.texto && escaneo && !escaneo.parar) {
+          // Franjas centrales en cada fotograma; el fotograma entero (y girado) cada 3 vueltas.
+          const hallado = await decodificarCanvas(video, { completo: vuelta % 3 === 0 });
+          if (hallado?.texto && !sesion.parar) {
             const codigo = hallado.texto;
             cerrarEscaner();
             aplicarEan(codigo);
@@ -2050,14 +2121,14 @@ async function abrirEscaner() {
           }
         } catch { /* el siguiente fotograma */ }
       }
-      if (escaneo && !escaneo.parar) escaneo.timer = setTimeout(bucle, 320);
+      if (!sesion.parar) sesion.timer = setTimeout(bucle, 200);
     };
     bucle();
   } catch (err) {
     const denegado = err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError' || err?.name === 'SecurityError';
     estado.textContent = denegado
-      ? 'No se ha permitido usar la cámara. Puedes autorizarla en los ajustes del navegador y volver a intentarlo.'
-      : 'No se ha podido abrir la cámara.';
+      ? 'No se ha permitido usar la cámara. Puedes autorizarla en los ajustes del navegador o usar «Hacer foto del código».'
+      : 'No se ha podido abrir la cámara. Usa «Hacer foto del código».';
   }
 }
 
