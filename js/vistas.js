@@ -560,11 +560,11 @@ export function htmlProducto({ p, hermanos, galeria, vacios, enComparar, favorit
     ${corregidas}
     ${htmlGaleria(galeria)}
     ${seccion('Cabecera', 'info', `${htmlKv(cabeceraPares, vacios)}<p class="nota">Consumo preferente: el PDF no indica la unidad. Por los valores, lo habitual es que sean días. El número de arriba no se ha modificado.</p>`, { open: true })}
+    ${htmlDiseno(p, vacios)}
     ${seccion('Envase y embalaje', 'bottle', htmlKv(ENVASE.map(([k, lab]) => [lab, p[k]]), vacios), { open: true })}
     ${htmlPalet(p)}
     ${TABLAS.map((t) => htmlTabla(p, t, vacios)).join('')}
     ${seccion('Observaciones', 'info', `${notasInc(incsDe(incs, 'observaciones'))}${p.observaciones ? `<blockquote>${esc(p.observaciones)}</blockquote>` : '<p class="vacio">Sin observaciones.</p>'}`, { open: Boolean(p.observaciones) })}
-    ${htmlDiseno(p, vacios)}
     ${htmlHermanos(p, hermanos)}
     ${seccion('Control y origen', 'gear', htmlKv([
       ['Grupo en el paquete', p.grupo_pdf],
