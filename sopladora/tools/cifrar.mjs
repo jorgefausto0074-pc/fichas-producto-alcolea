@@ -82,9 +82,11 @@ await writeFile(path.join(salida, 'datos.enc'), encBuf);
 await writeFile(path.join(salida, 'formato.json'), JSON.stringify(completo, null, 1));
 
 const paquete = await abrirPaquete(password, completo, encBuf.buffer.slice(encBuf.byteOffset, encBuf.byteOffset + encBuf.byteLength));
-const n = paquete.doc.botellas.reduce((s, b) => s + b.fichas.length, 0);
-if (n !== 14 || paquete.indice.tipo !== 'sopladora') {
-  console.error('El paquete cifrado no se ha podido comprobar.');
+const botellas = paquete.doc.botellas?.length || 0;
+const n = (paquete.doc.botellas || []).reduce((s, b) => s + (b.fichas?.length || 0), 0);
+const fotos = Object.keys(paquete.imagenes || {}).length;
+if (paquete.indice.tipo !== 'sopladora' || botellas < 1 || n < 1 || fotos < 1) {
+  console.error('El paquete cifrado no tiene la estructura de la calculadora.');
   process.exit(1);
 }
 try {
@@ -94,7 +96,7 @@ try {
 } catch (err) {
   if (err?.name !== 'OperationError') throw err;
 }
-console.log(`Paquete cifrado: ${n} fichas, ${Object.keys(paquete.imagenes).length} fotos. La contraseña no se muestra.`);
+console.log(`Paquete cifrado: ${n} fichas, ${botellas} botellas, ${fotos} fotos. La contraseña no se muestra.`);
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 void aqui;

@@ -5,11 +5,6 @@ on:
     paths:
       - "sopladora/**"
       - ".github/workflows/android-sopladora-apk.yml"
-  push:
-    branches: [main]
-    paths:
-      - "sopladora/**"
-      - ".github/workflows/android-sopladora-apk.yml"
   workflow_dispatch:
     inputs:
       tag:
@@ -37,7 +32,15 @@ jobs:
         id: firma
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          presente() { if [ -n "$1" ]; then echo si; else echo no; fi; }
+          echo "ANDROID_KEYSTORE_BASE64=$(presente "$ANDROID_KEYSTORE_BASE64")"
+          echo "ANDROID_KEYSTORE_PASSWORD=$(presente "$ANDROID_KEYSTORE_PASSWORD")"
+          echo "ANDROID_KEY_ALIAS=$(presente "$ANDROID_KEY_ALIAS")"
+          echo "ANDROID_KEY_PASSWORD=$(presente "$ANDROID_KEY_PASSWORD")"
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
             echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/fichas-release.keystore"
             echo "firmada=true" >> "$GITHUB_OUTPUT"
@@ -45,7 +48,12 @@ jobs:
             echo "firmada=false" >> "$GITHUB_OUTPUT"
             echo "Este pull request no recibe los secretos de firma. Se comprueba que Gradle compila."
           else
-            echo "Falta el secreto ANDROID_KEYSTORE_BASE64." >&2
+            echo "Faltan los secretos de la misma keystore que Fichas." >&2
+            echo "Hay que crearlos en Settings → Secrets and variables → Actions:" >&2
+            echo "  ANDROID_KEYSTORE_BASE64 (keystore en base64, no el archivo .enc)" >&2
+            echo "  ANDROID_KEYSTORE_PASSWORD" >&2
+            echo "  ANDROID_KEY_ALIAS" >&2
+            echo "  ANDROID_KEY_PASSWORD" >&2
             exit 1
           fi
 
@@ -63,7 +71,35 @@ jobs:
           apk=$(ls app/build/outputs/apk/release/*.apk | head -1)
           test -n "$apk"
           cp "$apk" ../../CalculadoraSopladora.apk
-          echo "APK: $apk"
+          echo "APK: $(basename "$apk")"
+
+      - name: Comprobar que el certificado es el de Fichas
+        if: steps.firma.outputs.firmada == 'true'
+        run: |
+          python3 - << 'PY'
+          import hashlib, struct, sys
+          data = open("CalculadoraSopladora.apk", "rb").read()
+          eocd = data.rfind(b"PK\x05\x06")
+          cd = struct.unpack_from("<I", data, eocd + 16)[0]
+          assert data[cd - 16:cd] == b"APK Sig Block 42"
+          size = struct.unpack_from("<Q", data, cd - 24)[0]
+          pairs = data[cd - size:cd - 24]
+          off = 0
+          val = None
+          while off + 12 <= len(pairs):
+              ln = struct.unpack_from("<Q", pairs, off)[0]
+              pid = struct.unpack_from("<I", pairs, off + 8)[0]
+              if pid == 0x7109871A:
+                  val = pairs[off + 12:off + 8 + ln]
+              off += 8 + ln
+          idx = val.find(b"\x30\x82")
+          ln = struct.unpack_from(">H", val, idx + 2)[0]
+          fp = hashlib.sha256(val[idx:idx + 4 + ln]).hexdigest()
+          esperado = "1d6748237a577be6c739f4f02cb1834fd4786e18fb14e4912382ef138eb00a60"
+          print("certificado", fp[:8] + "…" + fp[-8:])
+          if fp != esperado:
+              sys.exit("El APK no está firmado con la keystore de Fichas Alcolea")
+          PY
 
       - name: Subir el APK del flujo
         uses: actions/upload-artifact@v4

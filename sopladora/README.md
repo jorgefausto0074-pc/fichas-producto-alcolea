@@ -13,7 +13,7 @@ Usa la misma contraseña que Fichas de producto terminado (el secreto `PT_PASSWO
 El paquete cifrado no está en el repositorio hasta que se genere con la contraseña. El JSON y las fotos no se suben en claro.
 
 1. Abre `preparar.html` (en local o, cuando la web esté publicada, https://jorgefausto0074-pc.github.io/fichas-producto-alcolea/sopladora/preparar.html).
-2. Elige `botellas.json` (las 14 fichas del PowerPoint Ed. 15 del 26/11/2026) y las fotos de botella extraídas de ese PowerPoint.
+2. Elige `botellas.json` y las fotos de botella. Una botella nueva usa el siguiente `slideNN` libre (20, 21…) y los id `bNN` / `sNN-NN`.
 3. Escribe la contraseña de Fichas. El cifrado se hace en el navegador. La contraseña no se envía a ningún sitio.
 4. Descarga `datos.enc` y `formato.json`, colócalos en `sopladora/` y súbelos a `main`.
 

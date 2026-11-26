@@ -5,6 +5,7 @@ import {
   calcularNuevo,
   fichasPlanas,
   mediasCalculadas,
+  ORDEN_ZONA,
   prepararFicha,
   repartoMayorResto,
   textoACentesimas,
@@ -57,17 +58,37 @@ export function auditarDocumento(doc) {
   };
 
   const planas = fichasPlanas(doc);
-  chk('14 fichas', planas.length === 14, String(planas.length));
-  chk('13 botellas', doc.botellas.length === 13, String(doc.botellas.length));
-  chk('Ninguna ficha Freeway añadida', planas.every((p) => !/freeway/i.test(p.ficha.ficha_codigo)));
+  chk('Hay al menos una botella', doc.botellas?.length >= 1, String(doc.botellas?.length ?? 0));
+  chk('Hay al menos una ficha', planas.length >= 1, String(planas.length));
+  chk('Cada botella trae fichas', (doc.botellas || []).every((b) => Array.isArray(b.fichas) && b.fichas.length >= 1));
+
+  const capacidadesConocidas = new Set(['0,5', '1', '1,5', '2']);
+  for (const item of planas) {
+    const cap = String(item.ficha.capacidad_l ?? '');
+    if (cap && !capacidadesConocidas.has(cap)) {
+      hallazgos.push(`${item.ficha.ficha_codigo}: capacidad «${cap}» nueva. Se acepta.`);
+    }
+    let ultimo = -1;
+    let habitual = true;
+    for (const z of item.preparada.zonas) {
+      const i = ORDEN_ZONA.indexOf(z.clave);
+      if (i < 0 || i < ultimo) habitual = false;
+      if (i >= 0) ultimo = i;
+    }
+    if (!habitual) {
+      hallazgos.push(`${item.ficha.ficha_codigo}: orden de zonas distinto del habitual. Se acepta.`);
+    }
+  }
 
   const invertidas = [];
   for (const item of planas) {
     for (const z of item.preparada.zonas) {
-      if (z.rango_invertido_en_ppt) invertidas.push({ ficha: item.ficha.ficha_codigo, zona: z });
+      if (z.rango_invertido_en_ppt) invertidas.push(z);
     }
   }
-  chk('Los rangos escritos al revés en el PowerPoint quedan con mínimo menor que máximo', invertidas.length > 0 && invertidas.every(({ zona }) => zona.min < zona.max && zona.medio * 2 === zona.min + zona.max), String(invertidas.length));
+  if (invertidas.length) {
+    chk('Los rangos marcados como invertidos quedan con mínimo menor que máximo', invertidas.every((zona) => zona.min < zona.max));
+  }
 
   chk('Ejemplo: máx 8,2 → Máx-Máx 8,4', aCentesimasNumero(8.2) + 20 === aCentesimasNumero(8.4));
 
@@ -75,25 +96,43 @@ export function auditarDocumento(doc) {
     const { ficha, preparada } = item;
     const clave = `${ficha.ficha_codigo}|${ficha.gas}`;
     const suma = preparada.sumaC / 100;
-    chk(`${clave}: nº de zonas`, ficha.n_zonas === preparada.zonas.length && ficha.zonas.length === preparada.zonas.length);
-    chk(`${clave}: suma de medios`, Math.abs(suma - ficha.suma_medios_zonas) < 1e-9, `${suma} vs ${ficha.suma_medios_zonas}`);
+    chk(`${clave}: tiene zonas`, preparada.zonas.length >= 1 && ficha.zonas.length === preparada.zonas.length);
+    if (ficha.n_zonas != null) chk(`${clave}: nº de zonas`, ficha.n_zonas === preparada.zonas.length);
+    if (ficha.suma_medios_zonas != null) {
+      chk(`${clave}: suma de medios`, Math.abs(suma - ficha.suma_medios_zonas) < 1e-9, `${suma} vs ${ficha.suma_medios_zonas}`);
+    }
+    for (const z of preparada.zonas) {
+      chk(`${clave}/${z.nombre || z.clave}: zona con nombre, mínimo, medio y máximo`,
+        Boolean(z.nombre) && Number.isFinite(z.min) && Number.isFinite(z.max) && Number.isFinite(z.medio));
+      chk(`${clave}/${z.nombre || z.clave}: mínimo < máximo`, z.minC < z.maxC);
+    }
     const total = ficha.peso_total_g;
-    chk(`${clave}: total mín/medio/máx`,
-      aCentesimasNumero(total.min) === Math.round(total.min * 100)
-      && aCentesimasNumero(total.medio) === Math.round(total.medio * 100)
-      && aCentesimasNumero(total.max) === Math.round(total.max * 100));
-    chk(`${clave}: extremos del total`,
-      aCentesimasNumero(total.min_min) === aCentesimasNumero(total.min) - 20
-      && aCentesimasNumero(total.max_max) === aCentesimasNumero(total.max) + 20);
-    chk(`${clave}: cortes + 1 = zonas`, ficha.cortes_cm.length + 1 === ficha.n_zonas, `${ficha.cortes_cm.length} cortes`);
+    if (total) {
+      chk(`${clave}: total mín/medio/máx`,
+        aCentesimasNumero(total.min) === Math.round(total.min * 100)
+        && aCentesimasNumero(total.medio) === Math.round(total.medio * 100)
+        && aCentesimasNumero(total.max) === Math.round(total.max * 100));
+      if (total.min_min != null && total.max_max != null) {
+        chk(`${clave}: extremos del total`,
+          aCentesimasNumero(total.min_min) === aCentesimasNumero(total.min) - 20
+          && aCentesimasNumero(total.max_max) === aCentesimasNumero(total.max) + 20);
+      }
+    }
+    if (Array.isArray(ficha.cortes_cm) && ficha.cortes_cm.length + 1 !== preparada.zonas.length) {
+      hallazgos.push(`${clave}: ${ficha.cortes_cm.length} cortes y ${preparada.zonas.length} zonas. Se acepta.`);
+    }
 
     let sumaPct = 0;
     preparada.zonas.forEach((z, i) => {
       const p = (z.medioC / preparada.sumaC) * 100;
       sumaPct += p;
-      chk(`${clave}/${z.nombre}: % sobre la suma de zonas`, Math.abs(p - z.pct_sobre_suma_zonas) < 5e-4, `${p} vs ${z.pct_sobre_suma_zonas}`);
-      const pt = (z.medio / total.medio) * 100;
-      chk(`${clave}/${z.nombre}: % sobre el total del PowerPoint (dato, no se muestra)`, Math.abs(pt - z.pct_sobre_peso_total) < 5e-4);
+      if (z.pct_sobre_suma_zonas != null) {
+        chk(`${clave}/${z.nombre}: % sobre la suma de zonas`, Math.abs(p - z.pct_sobre_suma_zonas) < 5e-4, `${p} vs ${z.pct_sobre_suma_zonas}`);
+      }
+      if (total?.medio && z.pct_sobre_peso_total != null) {
+        const pt = (z.medio / total.medio) * 100;
+        chk(`${clave}/${z.nombre}: % sobre el total del PowerPoint (dato, no se muestra)`, Math.abs(pt - z.pct_sobre_peso_total) < 5e-4);
+      }
       chk(`${clave}/${z.nombre}: Mín-Mín`, z.minMinC === z.minC - 20);
       chk(`${clave}/${z.nombre}: Máx-Máx`, z.maxMaxC === z.maxC + 20);
       chk(`${clave}/${z.nombre}: Mín ≤ Medio ≤ Máx`, z.minC <= z.medioC && z.medioC <= z.maxC, `${z.minC} ${z.medioC} ${z.maxC}`);
@@ -165,8 +204,9 @@ export function auditarDocumento(doc) {
 
   const calculadas = mediasCalculadas(planas);
   const porNombre = new Map(calculadas.map((g) => [g.grupo, g]));
+  const general = porNombre.get('GENERAL (todas las fichas)');
+  chk('La media general cuenta todas las fichas', general?.n_fichas === planas.length, String(general?.n_fichas));
   const esperadas = doc.medias_pct_grupos || [];
-  chk('17 grupos de medias', esperadas.length === 17 && calculadas.length === 17, `${calculadas.length}/${esperadas.length}`);
   for (const g of esperadas) {
     const c = porNombre.get(g.grupo);
     chk(`Grupo «${g.grupo}» presente`, Boolean(c));

@@ -3,7 +3,7 @@
 
 import { spawn } from 'child_process';
 import { createRequire } from 'module';
-import { createReadStream, existsSync, mkdirSync, statSync } from 'fs';
+import { createReadStream, existsSync, mkdirSync, readFileSync, statSync } from 'fs';
 import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -147,8 +147,9 @@ try {
   await page.click('input[name="recordar"]');
   await page.click('#login-form button[type="submit"]');
   await page.waitForSelector('[data-vista="lista"]', { timeout: 30000 });
+  const esperadas = JSON.parse(readFileSync(jsonPath, 'utf8')).botellas.length;
   const tarjetas = await page.$$eval('.tarjeta', (n) => n.length);
-  ok(tarjetas === 13, `13 botellas en el listado (${tarjetas})`);
+  ok(tarjetas === esperadas, `${esperadas} botellas en el listado (${tarjetas})`);
   await shot(page, '03-listado.png');
 
   await page.type('#q', 'hacendado');

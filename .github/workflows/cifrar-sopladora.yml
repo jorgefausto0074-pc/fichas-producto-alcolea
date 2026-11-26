@@ -45,10 +45,12 @@ jobs:
             const formato = JSON.parse(readFileSync("sopladora/formato.json", "utf8"));
             const enc = readFileSync("sopladora/datos.enc");
             const paquete = await abrirPaquete(password, formato, enc.buffer.slice(enc.byteOffset, enc.byteOffset + enc.byteLength));
-            const n = paquete.doc.botellas.reduce((s, b) => s + b.fichas.length, 0);
-            if (n !== 14 || paquete.indice.tipo !== "sopladora") {
+            const botellas = paquete.doc.botellas?.length || 0;
+            const n = (paquete.doc.botellas || []).reduce((s, b) => s + (b.fichas?.length || 0), 0);
+            const fotos = Object.keys(paquete.imagenes || {}).length;
+            if (paquete.indice.tipo !== "sopladora" || botellas < 1 || n < 1) {
               console.error("El paquete no abre como Calculadora Sopladora.");
               process.exit(1);
             }
-            console.log("El paquete publicado abre con PT_PASSWORD. Fichas: " + n + ". No se imprimen gramajes.");
+            console.log("El paquete publicado abre con PT_PASSWORD. Fichas: " + n + ", botellas: " + botellas + ", fotos: " + fotos + ". No se imprimen gramajes.");
           '
