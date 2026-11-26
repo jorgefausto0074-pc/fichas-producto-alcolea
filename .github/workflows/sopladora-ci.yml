@@ -34,5 +34,8 @@ jobs:
       - name: Cambiar de una ficha de 4 zonas a una de 3
         run: node sopladora/tests/cambio-ficha.mjs
 
+      - name: CSV, aviso de peso y suma exacta
+        run: node sopladora/tests/uso.mjs
+
       - name: Fichas de producto sigue pasando sus pruebas de actualización
         run: node tests/actualizar.mjs

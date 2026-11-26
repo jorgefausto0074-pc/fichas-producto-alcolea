@@ -141,7 +141,7 @@ a { color: var(--blue); }
 .marca-r { width: 36px; height: 36px; object-fit: contain; }
 .wordmark { display: block; letter-spacing: -.03em; font-size: 1.05rem; }
 .marca-sub { display: block; color: var(--muted); font-size: .78rem; }
-.tabs { display: flex; gap: .35rem; }
+.tabs { display: flex; flex-wrap: wrap; gap: .35rem; }
 .tab {
   min-height: var(--tap); padding: 0 1rem; border-radius: 999px; border: 1px solid var(--line);
   background: #fff; font-weight: 700; color: var(--navy);
@@ -153,7 +153,7 @@ a { color: var(--blue); }
 .filtros { display: flex; flex-direction: column; gap: .45rem; margin: .7rem 0; }
 .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
 .chip {
-  min-height: 40px; padding: .35rem .8rem; border-radius: 999px; border: 1px solid var(--line);
+  min-height: 44px; padding: .35rem .8rem; border-radius: 999px; border: 1px solid var(--line);
   background: #fff; font-weight: 700; color: var(--navy);
 }
 .chip.activo { background: var(--blue); color: #fff; border-color: var(--blue); }
@@ -174,9 +174,13 @@ a { color: var(--blue); }
 .tarjeta h2 { margin: .25rem 0 .15rem; font-size: 1.02rem; letter-spacing: -.02em; }
 .meta, .gramos { margin: .15rem 0; color: var(--muted); font-size: .82rem; }
 .gramos { color: var(--navy); font-weight: 700; }
+.gramaje-grande { margin: .15rem 0; font-size: 1.55rem; font-weight: 800; color: var(--navy); letter-spacing: -.03em; }
+.enlace-ficha { background: none; border: 0; padding: 0; min-height: 44px; font: inherit; font-weight: 800; color: inherit; text-align: left; }
+.estrella { min-width: 44px; min-height: 44px; border: 0; background: transparent; font-size: 1.4rem; color: var(--muted); }
+.estrella.on { color: var(--orange); }
 .badge {
   display: inline-block; margin: 0 .25rem .15rem 0; padding: .12rem .45rem; border-radius: 999px;
-  font-size: .72rem; font-weight: 700; letter-spacing: .02em;
+  font-size: .75rem; font-weight: 700; letter-spacing: .02em;
 }
 .badge.con_gas { background: #fff0ea; color: #9a3412; }
 .badge.sin_gas { background: var(--blue-soft); color: var(--blue); }
@@ -188,6 +192,9 @@ a { color: var(--blue); }
 .ficha-titulo h1 { margin: .15rem 0; letter-spacing: -.03em; font-size: clamp(1.5rem, 3vw, 2.1rem); }
 .codigo { margin: 0 0 .8rem; color: var(--muted); font-weight: 700; }
 .ficha-grid { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: 18px; align-items: start; min-width: 0; }
+.col-foto { grid-column: 1; grid-row: 1 / span 2; }
+.ficha-datos { grid-column: 2; grid-row: 1; }
+.ficha-grid > .calculadora { grid-column: 2; grid-row: 2; }
 .ficha-datos, .col-foto, .extremos, .calculadora, .cmp-zona, .cmp-nombre { min-width: 0; max-width: 100%; }
 .foto-marco { position: relative; background: var(--ice-soft); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
 .foto { display: block; width: 100%; height: auto; max-height: 70vh; object-fit: contain; margin: 0 auto; }
@@ -199,7 +206,7 @@ a { color: var(--blue); }
 .marca-corte {
   position: absolute; left: 0; right: 0; transform: translateY(-50%);
   border-top: 2px dashed #fff; color: var(--navy); background: rgba(255,255,255,.88);
-  font-size: .72rem; font-weight: 700; width: max-content; padding: 0 .35rem; border-radius: 999px;
+  font-size: .75rem; font-weight: 700; width: max-content; padding: 0 .35rem; border-radius: 999px;
 }
 .zona-hombro, .punto.zona-hombro, .seg.zona-hombro { background: var(--navy); color: #fff; }
 .zona-zona2, .punto.zona-zona2, .seg.zona-zona2 { background: var(--blue); color: #fff; }
@@ -245,6 +252,30 @@ a { color: var(--blue); }
 .cmp-relleno.antes { background: var(--navy); }
 .cmp-relleno.despues { background: var(--orange); }
 
+.medido {
+  display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 6.5rem) minmax(0, 1.2fr);
+  gap: .35rem; align-items: center; margin: .35rem 0; padding: .25rem .4rem; border-radius: 10px;
+  color: var(--navy); background: #fff;
+}
+.medido input { min-height: 44px; width: 100%; min-width: 0; }
+.medido.fuera { background: #fff4e5; border-left: 4px solid var(--orange); }
+.medido.extremo { background: #ffd0c2; border-left: 4px solid #9a2200; color: #7a1d12; font-weight: 800; }
+.medido.dentro { background: #fff; color: var(--navy); }
+@media (max-width: 400px) {
+  .medido { grid-template-columns: minmax(0, 1fr) minmax(0, 6.2rem); }
+  .medido .juicio { grid-column: 1 / -1; }
+}
+.historial-item { display: flex; flex-wrap: wrap; gap: .4rem; margin: .3rem 0; }
+.comparar-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; min-width: 0; }
+.comparar-panel { min-width: 0; background: #fff; border-radius: var(--radius); padding: .8rem; box-shadow: var(--shadow); }
+.shell.entra { animation: portada-in .28s ease; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .28s; }
+
+body.linea { background: #fff; color: var(--navy); font-size: 1.35rem; }
+body.linea .tabla th, body.linea .tabla td, body.linea .lead, body.linea .hint { font-size: 1.15rem; color: var(--navy); }
+body.linea .gramaje-grande { font-size: 2.1rem; }
+body.linea .tarjeta, body.linea .calculadora, body.linea .tabla-scroll { border: 2px solid var(--navy); }
+
 .extremos {
   margin-top: 1rem; background: var(--warn-bg); border: 2px solid var(--orange);
   border-radius: var(--radius); padding: .2rem .8rem .8rem;
@@ -281,7 +312,11 @@ a { color: var(--blue); }
 @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
 
 @media (max-width: 800px) {
-  .ficha-grid { grid-template-columns: minmax(0, 1fr); }
+  .ficha-grid { display: flex; flex-direction: column; }
+  .col-foto { order: 1; }
+  .ficha-grid > .calculadora { order: 2; }
+  .ficha-datos { order: 3; }
+  .comparar-grid { grid-template-columns: minmax(0, 1fr); }
   .rejilla { grid-template-columns: minmax(0, 1fr); }
   .tabla th, .tabla td { padding: .4rem .3rem; font-size: .78rem; }
   .num { white-space: normal; }
@@ -305,7 +340,7 @@ a { color: var(--blue); }
   .no-print, .topbar, .portada, .login, .pie a, .chips, .calculadora button { display: none !important; }
   .solo-print { display: flex; gap: 12px; align-items: center; }
   .print-logo { height: 36px; width: auto; }
-  .print-cab span { display: block; color: #3a4d6e; font-size: 11px; }
+  .print-cab span { display: block; color: #3a4d6e; font-size: 12px; }
   .shell { max-width: none; }
   .ficha-grid { display: block; }
   .foto { max-height: 280px; }

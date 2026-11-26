@@ -76,6 +76,7 @@ for (const nombre of await readdir(fotosDir)) {
 
 const { indice, blob } = montarIndice(doc, fotos);
 const { enc, formato } = await empaquetarIndice(password, indice, blob);
+// edicion y fecha_portada salen de meta del JSON (o del valor ya publicado). No altera gramajes.
 const completo = completarFormato(formato, indice.doc);
 const encBuf = Buffer.from(enc);
 await writeFile(path.join(salida, 'datos.enc'), encBuf);
@@ -84,8 +85,8 @@ await writeFile(path.join(salida, 'formato.json'), JSON.stringify(completo, null
 const paquete = await abrirPaquete(password, completo, encBuf.buffer.slice(encBuf.byteOffset, encBuf.byteOffset + encBuf.byteLength));
 const botellas = paquete.doc.botellas?.length || 0;
 const n = (paquete.doc.botellas || []).reduce((s, b) => s + (b.fichas?.length || 0), 0);
-const fotos = Object.keys(paquete.imagenes || {}).length;
-if (paquete.indice.tipo !== 'sopladora' || botellas < 1 || n < 1 || fotos < 1) {
+const nFotos = Object.keys(paquete.imagenes || {}).length;
+if (paquete.indice.tipo !== 'sopladora' || botellas < 1 || n < 1 || nFotos < 1) {
   console.error('El paquete cifrado no tiene la estructura de la calculadora.');
   process.exit(1);
 }
@@ -96,7 +97,7 @@ try {
 } catch (err) {
   if (err?.name !== 'OperationError') throw err;
 }
-console.log(`Paquete cifrado: ${n} fichas, ${botellas} botellas, ${fotos} fotos. La contraseña no se muestra.`);
+console.log(`Paquete cifrado: ${n} fichas, ${botellas} botellas, ${nFotos} fotos. La contraseña no se muestra.`);
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 void aqui;

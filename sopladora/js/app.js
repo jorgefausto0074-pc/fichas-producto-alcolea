@@ -2,12 +2,16 @@ import { abrirPaquete, descifrarConClave, derivarClave } from './descifrar.js';
 import { borrarClave, guardarClave, leerClave } from './sesion.js';
 import { botellaVisible, textoCapacidad, textoGas } from './buscar.js';
 import { refrescarFoto } from './foto.js';
+import { anotarCalculo, borrarHistorial, guardarMemoria, leerMemoria, recordarGramaje } from './memoria.js';
+import { csvFicha } from './csv.js';
+import { contarHasta } from './animar.js';
 import {
   calcularNuevo,
   fichasPlanas,
   formatoGramos,
   formatoPct,
   fueraDeLoHabitual,
+  clasificarMedida,
   mediasCalculadas,
   nombreZonaVisible,
   ORDEN_ZONA,
@@ -18,6 +22,8 @@ import {
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const CAPACIDADES = ['0,5', '1', '1,5', '2'];
 
+const memoria = leerMemoria();
+
 const state = {
   formato: null,
   doc: null,
@@ -27,6 +33,7 @@ const state = {
   q: '',
   gas: 'todas',
   capacidad: 'todas',
+  soloFavoritos: false,
   gramajes: new Map(),
   error: '',
   ocupado: false,
@@ -36,8 +43,20 @@ const state = {
   recargando: false,
 };
 
+for (const [id, texto] of Object.entries(memoria.gramajes || {})) {
+  if (typeof texto === 'string') state.gramajes.set(id, texto);
+}
+
 const urls = new Map();
 let entradaIniciada = false;
+
+function edicionTexto() {
+  const meta = state.doc?.meta || {};
+  const formato = state.formato || {};
+  const ed = meta.edicion || formato.edicion;
+  const fecha = meta.fecha_portada || formato.fecha_portada;
+  return [ed ? `Edición ${ed}` : '', fecha || '', 'Refresco Iberia · Planta Alcolea'].filter(Boolean).join(' · ');
+}
 
 function el(tag, attrs = {}, children = []) {
   const nodo = document.createElement(tag);
@@ -92,6 +111,7 @@ function ruta() {
   const ficha = h.match(/^\/ficha\/([A-Za-z0-9-]+)$/);
   if (ficha) return { vista: 'ficha', id: ficha[1] };
   if (h === '/medias') return { vista: 'medias' };
+  if (h === '/comparar') return { vista: 'comparar', id: null };
   return { vista: 'lista', id: null };
 }
 
@@ -125,7 +145,7 @@ function pintarPortada() {
       el('p', { class: 'portada-pie' }, 'Toca para entrar'),
     ]),
   ]);
-  app().replaceChildren(seccion);
+  app().replaceChildren(el('main', {}, [seccion]));
 }
 
 function continuar() {
@@ -302,13 +322,26 @@ async function salir() {
 }
 
 function pintar() {
+  const hacer = () => pintarAhora();
+  if (state.doc && document.startViewTransition && !REDUCE) {
+    try { document.startViewTransition(hacer); }
+    catch { hacer(); }
+  } else {
+    hacer();
+    const shell = document.querySelector('main.shell');
+    if (shell && state.doc && !REDUCE) shell.classList.add('entra');
+  }
+}
+
+function pintarAhora() {
   if (!state.doc) return;
-  document.body.className = 'en-app';
+  document.body.className = memoria.modoLinea ? 'en-app linea' : 'en-app';
   const r = ruta();
   state.vista = r.vista;
-  const raiz = el('div', { class: 'shell', 'data-vista': r.vista });
+  const raiz = el('main', { class: 'shell', 'data-vista': r.vista });
   raiz.append(cabecera());
   if (r.vista === 'medias') raiz.append(vistaMedias());
+  else if (r.vista === 'comparar') raiz.append(vistaComparar());
   else if (r.vista === 'ficha') raiz.append(vistaFicha(r.id));
   else raiz.append(vistaLista());
   raiz.append(pie());
@@ -336,8 +369,23 @@ function cabecera() {
         class: r.vista === 'medias' ? 'tab activa' : 'tab',
         onclick: () => ir('#/medias'),
       }, 'Medias'),
+      el('button', {
+        type: 'button',
+        class: r.vista === 'comparar' ? 'tab activa' : 'tab',
+        onclick: () => ir('#/comparar'),
+      }, 'Comparar'),
     ]),
     el('div', { class: 'top-acciones' }, [
+      el('button', {
+        type: 'button',
+        class: 'btn btn-ghost',
+        'aria-pressed': memoria.modoLinea ? 'true' : 'false',
+        onclick: () => {
+          memoria.modoLinea = !memoria.modoLinea;
+          guardarMemoria(memoria);
+          pintar();
+        },
+      }, 'Modo línea'),
       state.instalador ? el('button', { type: 'button', class: 'btn btn-ghost', onclick: instalar }, 'Instalar') : null,
       state.hayNueva ? el('button', { type: 'button', class: 'btn btn-ghost', onclick: activarNueva }, 'Actualizar la aplicación') : null,
       el('button', { type: 'button', class: 'btn btn-ghost', onclick: salir }, 'Salir'),
@@ -359,7 +407,7 @@ function activarNueva() {
 
 function pie() {
   return el('footer', { class: 'pie' }, [
-    el('span', {}, 'Edición 15 · 24/11/2026 · Refresco Iberia · Planta Alcolea'),
+    el('span', {}, edicionTexto()),
     el('a', { href: 'preparar.html', class: 'no-print' }, 'Cifrar un paquete nuevo'),
   ]);
 }
@@ -390,12 +438,15 @@ function vistaLista() {
 }
 
 function botellasVisibles() {
-  return state.doc.botellas.filter((b) => botellaVisible(b, {
-    q: state.q,
-    gas: state.gas,
-    capacidad: state.capacidad,
-    gramosDe: gramajeDe,
-  }));
+  return state.doc.botellas.filter((b) => {
+    if (state.soloFavoritos && !b.fichas.some((f) => memoria.favoritos.includes(f.id))) return false;
+    return botellaVisible(b, {
+      q: state.q,
+      gas: state.gas,
+      capacidad: state.capacidad,
+      gramosDe: gramajeDe,
+    });
+  });
 }
 
 function nodoResultados(visibles) {
@@ -436,25 +487,44 @@ function filtros() {
       { id: 'todas', texto: 'Todas las capacidades' },
       ...CAPACIDADES.map((c) => ({ id: c, texto: textoCapacidad(c) })),
     ], (id) => { state.capacidad = id; }),
+    el('button', {
+      type: 'button',
+      class: state.soloFavoritos ? 'chip activo' : 'chip',
+      'aria-pressed': state.soloFavoritos ? 'true' : 'false',
+      onclick: () => { state.soloFavoritos = !state.soloFavoritos; pintar(); },
+    }, 'Favoritos'),
   ]);
 }
 
 function tarjeta(botella, i) {
   const primera = botella.fichas[0];
   const foto = urlImagen(botella);
-  return el('button', {
-    type: 'button',
+  const favorita = botella.fichas.some((f) => memoria.favoritos.includes(f.id));
+  return el('article', {
     class: 'tarjeta',
     style: REDUCE ? '' : `--d:${i}`,
-    onclick: () => ir(`#/ficha/${primera.id}`),
+    onclick: (ev) => {
+      if (ev.target.closest('button')) return;
+      ir(`#/ficha/${primera.id}`);
+    },
   }, [
     foto ? el('img', { src: foto, alt: '', class: 'mini' }) : el('div', { class: 'mini mini-vacia' }),
     el('div', { class: 'tarjeta-cuerpo' }, [
       el('span', { class: `badge ${botella.gas}` }, textoGas(botella.gas)),
       el('span', { class: 'badge cap' }, textoCapacidad(botella.capacidad_l)),
-      el('h2', {}, botella.nombre),
+      el('button', {
+        type: 'button',
+        class: favorita ? 'estrella on' : 'estrella',
+        'aria-pressed': favorita ? 'true' : 'false',
+        'aria-label': favorita ? 'Quitar de favoritos' : 'Marcar como favorita',
+        onclick: (ev) => { ev.stopPropagation(); alternarFavorito(primera.id); },
+      }, '★'),
+      el('h2', {}, [
+        el('button', { type: 'button', class: 'enlace-ficha', onclick: () => ir(`#/ficha/${primera.id}`) }, botella.nombre),
+      ]),
       el('p', { class: 'meta' }, `${botella.fichas[0].n_zonas} zonas${botella.fichas.length > 1 ? ` · ${botella.fichas.length} fichas` : ''}`),
-      el('p', { class: 'gramos' }, botella.fichas.map((f) => `${f.ficha_codigo} · ${gramajeDe(f)} g`).join('  ·  ')),
+      el('p', { class: 'gramaje-grande' }, botella.fichas.map((f) => `${gramajeDe(f)} g`).join(' · ')),
+      el('p', { class: 'gramos' }, botella.fichas.map((f) => f.ficha_codigo).join('  ·  ')),
     ]),
   ]);
 }
@@ -472,17 +542,20 @@ function vistaFicha(id) {
   const texto = state.gramajes.get(ficha.id) || '';
   const pedido = textoACentesimas(texto);
   const nuevo = pedido.ok ? calcularNuevo(preparada, pedido.centesimas) : null;
-  const aviso = nuevo && fueraDeLoHabitual(pedido.centesimas, preparada.sumaC);
   const sec = el('article', { class: 'ficha', 'data-ficha': ficha.id, 'data-patron': String(preparada.sumaC) }, [
     el('div', { class: 'ficha-nav no-print' }, [
       el('button', { type: 'button', class: 'btn btn-ghost', onclick: () => ir('#/') }, 'Volver'),
+      el('button', { type: 'button', class: 'btn btn-ghost', onclick: () => alternarFavorito(ficha.id) }, memoria.favoritos.includes(ficha.id) ? '★ Favorita' : '☆ Favorita'),
+      el('button', { type: 'button', class: 'btn btn-ghost', onclick: () => alternarComparar(ficha.id) }, 'Comparar'),
+      el('button', { type: 'button', class: 'btn btn-ghost', onclick: () => compartirResultado(botella, ficha, preparada) }, 'Compartir'),
+      el('button', { type: 'button', class: 'btn btn-ghost', onclick: () => exportarCsv(botella, ficha, preparada) }, 'CSV'),
       el('button', { type: 'button', class: 'btn btn-primary', onclick: () => window.print() }, 'Imprimir / Guardar PDF'),
     ]),
     el('header', { class: 'solo-print print-cab' }, [
       logo('print-logo'),
       el('div', {}, [
         el('strong', {}, 'Calculadora Sopladora'),
-        el('span', {}, 'Refresco Iberia · Planta Alcolea · Edición 15 · 24/11/2026'),
+        el('span', {}, edicionTexto()),
         el('span', {}, `Impreso el ${new Date().toLocaleDateString('es-ES')}`),
       ]),
     ]),
@@ -508,11 +581,12 @@ function vistaFicha(id) {
     el('p', { class: 'lead' }, `El objetivo de cada zona es el medio. El gramaje patrón de la ficha es la suma de los medios: ${formatoGramos(preparada.sumaC)} g.`),
     tablaZonas('patrón', preparada.zonas, preparada.pct, preparada),
     el('p', { class: 'suma', 'data-suma-zonas': String(preparada.sumaC) }, `Suma de zonas = ${formatoGramos(preparada.sumaC)} g`),
-    calculadora(ficha, texto, preparada),
   );
   const caja = el('div', { id: 'resultado-gramaje' });
   rellenarResultado(caja, ficha, preparada);
   datos.append(caja);
+  datos.append(historialFicha());
+  cuerpo.append(calculadora(ficha, texto, preparada));
   if (ficha.notas?.length) {
     datos.append(el('section', { class: 'notas' }, [
       el('h2', {}, 'Notas de la ficha'),
@@ -584,7 +658,7 @@ function barraPesos(preparada, nuevo) {
     }));
   });
   return el('div', { class: 'barra-caja' }, [
-    el('p', { class: 'hint' }, 'Reparto del gramaje'),
+    el('p', { class: 'hint', 'data-leyenda-reparto': '1' }, nuevo ? 'Reparto del gramaje nuevo' : 'Reparto del gramaje patrón'),
     barra,
   ]);
 }
@@ -601,7 +675,7 @@ function tablaZonas(cual, filas, pct, totales, zonasNombre) {
     cuerpo.append(el('tr', { 'data-zona': fila.clave || zonasNombre?.[i]?.clave || String(i) }, [
       el('th', { scope: 'row' }, nombre),
       el('td', { class: 'num' }, formatoGramos(fila.minC)),
-      el('td', { class: 'num objetivo', 'data-medio': String(fila.medioC) }, formatoGramos(fila.medioC)),
+      el('td', { class: 'num objetivo', 'data-medio': String(fila.medioC), 'data-cent': String(fila.medioC) }, formatoGramos(fila.medioC)),
       el('td', { class: 'num' }, formatoGramos(fila.maxC)),
       el('td', { class: 'num', 'data-pct': String(pct[i]) }, formatoPct(pct[i])),
     ]));
@@ -624,23 +698,45 @@ function rellenarResultado(caja, ficha, preparada) {
   const nuevo = pedido.ok ? calcularNuevo(preparada, pedido.centesimas) : null;
   const aviso = nuevo && fueraDeLoHabitual(pedido.centesimas, preparada.sumaC);
   const abierto = caja.querySelector?.('.extremos')?.open;
+  const previos = [...(caja.querySelectorAll?.('[data-medio]') || [])].map((n) => n.dataset.cent);
+  const previa = caja.querySelector('.comparativa');
+  const mismas = previa && previa.dataset.nzonas === String(preparada.zonas.length) && nuevo;
+  let seccionCmp = null;
+  if (nuevo && mismas) {
+    actualizarBarras(previa, preparada, nuevo);
+    seccionCmp = previa;
+    seccionCmp.remove();
+  } else if (nuevo) {
+    seccionCmp = comparativa(preparada, nuevo);
+    seccionCmp.dataset.nzonas = String(preparada.zonas.length);
+  }
   caja.replaceChildren();
   if (pedido.ok && nuevo) {
     const bloques = [
       el('h2', {}, `Gramaje nuevo ${formatoGramos(pedido.centesimas)} g`),
+      pedido.parcial ? el('p', { class: 'hint' }, `Se usan ${formatoGramos(pedido.centesimas)} g mientras completas los decimales.`) : null,
       pedido.redondeado ? el('p', { class: 'hint' }, `Se usan ${formatoGramos(pedido.centesimas)} g, redondeados a 2 decimales.`) : null,
       aviso ? el('p', { class: 'aviso-habitual', role: 'status' }, 'Gramaje fuera de lo habitual para esta botella.') : null,
       tablaZonas('nuevo', nuevo.filas, nuevo.pct, nuevo, preparada.zonas),
       el('p', { class: 'suma', 'data-suma-nueva': String(nuevo.sumaC), 'data-n': String(pedido.centesimas) }, `Suma de zonas = ${formatoGramos(nuevo.sumaC)} g`),
-      comparativa(preparada, nuevo),
+      seccionCmp,
     ].filter(Boolean);
     caja.append(...bloques);
+    if (!mismas) crecerBarras(seccionCmp);
+    caja.querySelectorAll('[data-medio]').forEach((nodo, i) => {
+      if (previos[i] != null) nodo.dataset.cent = previos[i];
+      contarHasta(nodo, Number(nodo.dataset.medio), REDUCE);
+    });
+    programarHistorial(ficha, pedido);
   } else if (texto.trim() && !pedido.ok && pedido.motivo !== 'vacio') {
     caja.append(el('p', { class: 'error', role: 'alert' }, 'Escribe el gramaje en gramos. Vale la coma o el punto: 40,4 o 40.4.'));
   }
+  caja.append(pesosMedidos(ficha, preparada, nuevo));
   const extremos = recuadroExtremos(preparada, nuevo);
   if (abierto) extremos.open = true;
   caja.append(extremos);
+  const leyenda = caja.closest('article.ficha')?.querySelector('[data-leyenda-reparto]');
+  if (leyenda) leyenda.textContent = nuevo ? 'Reparto del gramaje nuevo' : 'Reparto del gramaje patrón';
   refrescarFoto(caja, preparada, nuevo);
   const campo = document.getElementById('nuevo-gramaje');
   if (campo) campo.setAttribute('aria-invalid', texto.trim() && !pedido.ok ? 'true' : 'false');
@@ -662,6 +758,7 @@ function calculadora(ficha, texto, preparada) {
         value: texto,
         oninput: (ev) => {
           state.gramajes.set(ficha.id, ev.target.value);
+          recordarGramaje(memoria, ficha.id, ev.target.value);
           const caja = document.getElementById('resultado-gramaje');
           if (caja) rellenarResultado(caja, ficha, preparada);
         },
@@ -716,9 +813,9 @@ function barra(etiqueta, valor, maximo, clase) {
   return el('div', { class: 'cmp-linea' }, [
     el('span', { class: 'cmp-etiq' }, etiqueta),
     el('span', { class: 'cmp-pista' }, [
-      el('span', { class: `cmp-relleno ${clase}`, style: `width:${ancho}%` }),
+      el('span', { class: `cmp-relleno ${clase}`, 'data-ancho': String(ancho), style: 'width:0%' }),
     ]),
-    el('span', { class: 'num' }, formatoGramos(valor)),
+        el('span', { class: 'num', 'data-cent': String(valor) }, formatoGramos(valor)),
   ]);
 }
 
@@ -870,8 +967,230 @@ window.addEventListener('afterprint', () => {
   });
 });
 
+function crecerBarras(sec) {
+  if (!sec) return;
+  const aplicar = () => sec.querySelectorAll('[data-ancho]').forEach((n) => {
+    n.style.width = `${n.dataset.ancho}%`;
+  });
+  if (REDUCE) aplicar();
+  else requestAnimationFrame(aplicar);
+}
+
+function actualizarBarras(sec, preparada, nuevo) {
+  const maximo = Math.max(
+    ...preparada.zonas.map((z) => z.medioC),
+    ...nuevo.filas.map((f) => f.medioC),
+    1,
+  );
+  sec.querySelectorAll('.cmp-zona').forEach((zona, i) => {
+    const antes = preparada.zonas[i].medioC;
+    const despues = nuevo.filas[i].medioC;
+    const delta = despues - antes;
+    const marca = zona.querySelector('.delta');
+    if (marca) {
+      marca.textContent = `${formatoGramos(delta, { signo: true })} g`;
+      marca.className = delta === 0 ? 'delta cero' : 'delta';
+    }
+    const rellenos = zona.querySelectorAll('.cmp-relleno');
+    const nums = zona.querySelectorAll('.num');
+    [antes, despues].forEach((valor, k) => {
+      const ancho = Math.max(2, Math.round((valor / maximo) * 100));
+      if (rellenos[k]) {
+        rellenos[k].dataset.ancho = String(ancho);
+        rellenos[k].style.width = `${ancho}%`;
+      }
+      if (nums[k]) contarHasta(nums[k], valor, REDUCE);
+    });
+  });
+}
+
+function pesosMedidos(ficha, preparada, nuevo) {
+  return el('section', { class: 'medidos' }, [
+    el('h2', {}, 'Peso medido'),
+    el('p', { class: 'hint' }, 'Opcional. Naranja si sale de mínimo y máximo. Resaltado fuerte si sale del valor extremo.'),
+    ...preparada.zonas.map((z, i) => {
+      const lim = nuevo ? nuevo.filas[i] : z;
+      const guardado = memoria.medidos[ficha.id]?.[z.clave] || '';
+      const juicio = clasificarMedida(guardado, lim.minC, lim.maxC);
+      return el('label', { class: `medido ${juicio}` }, [
+        el('span', {}, z.nombre),
+        el('input', {
+          inputmode: 'decimal',
+          value: guardado,
+          'aria-label': `Peso medido de ${z.nombre}`,
+          oninput: (ev) => {
+            memoria.medidos[ficha.id] = memoria.medidos[ficha.id] || {};
+            memoria.medidos[ficha.id][z.clave] = ev.target.value;
+            guardarMemoria(memoria);
+            const juicioNuevo = clasificarMedida(ev.target.value, lim.minC, lim.maxC);
+            const fila = ev.target.closest('.medido');
+            fila.className = `medido ${juicioNuevo}`;
+            fila.querySelector('.juicio').textContent = textoJuicio(juicioNuevo);
+          },
+        }),
+        el('span', { class: 'juicio' }, textoJuicio(juicio)),
+      ]);
+    }),
+  ]);
+}
+
+let historialTimer = 0;
+function programarHistorial(ficha, pedido) {
+  clearTimeout(historialTimer);
+  if (!pedido.ok || pedido.parcial) return;
+  const n = formatoGramos(pedido.centesimas);
+  historialTimer = setTimeout(() => {
+    anotarCalculo(memoria, {
+      fecha: new Date().toISOString(),
+      fichaId: ficha.id,
+      codigo: ficha.ficha_codigo,
+      n,
+    });
+    refrescarHistorial(document.querySelector('article.ficha'));
+  }, 450);
+}
+
+function textoJuicio(juicio) {
+  if (juicio === 'fuera') return 'Fuera de mínimo y máximo';
+  if (juicio === 'extremo') return 'Fuera del valor extremo';
+  if (juicio === 'dentro') return 'Dentro del margen de trabajo';
+  return '';
+}
+
+function itemHistorial(h, i) {
+  return el('div', { class: 'historial-item' }, [
+    el('button', {
+      type: 'button',
+      class: 'btn btn-ghost',
+      onclick: () => {
+        state.gramajes.set(h.fichaId, String(h.n).replace('.', ','));
+        recordarGramaje(memoria, h.fichaId, state.gramajes.get(h.fichaId));
+        ir(`#/ficha/${h.fichaId}`);
+      },
+    }, `${new Date(h.fecha).toLocaleString('es-ES')} · ${h.codigo} · ${h.n} g`),
+    el('button', {
+      type: 'button',
+      class: 'btn btn-ghost',
+      onclick: () => { borrarHistorial(memoria, i); pintar(); },
+    }, 'Borrar'),
+  ]);
+}
+
+function refrescarHistorial(raiz) {
+  const sec = raiz?.querySelector('.historial');
+  const lista = sec?.querySelector('.historial-lista');
+  if (!lista) return;
+  lista.replaceChildren(...memoria.historial.map((h, i) => itemHistorial(h, i)));
+  sec.querySelector('.hint')?.remove();
+  if (!memoria.historial.length) {
+    sec.append(el('p', { class: 'hint' }, 'Todavía no hay cálculos guardados en este dispositivo.'));
+  } else if (!sec.querySelector('[data-borrar-historial]')) {
+    sec.append(el('button', {
+      type: 'button',
+      class: 'btn btn-ghost',
+      'data-borrar-historial': '1',
+      onclick: () => { borrarHistorial(memoria, null); pintar(); },
+    }, 'Borrar historial'));
+  }
+}
+
+function historialFicha() {
+  const sec = el('section', { class: 'historial' }, [
+    el('h2', {}, 'Últimos cálculos'),
+    el('div', { class: 'historial-lista' }),
+  ]);
+  refrescarHistorial(el('div', {}, [sec]));
+  return sec;
+}
+
+function filasExportables(ficha, preparada) {
+  const texto = state.gramajes.get(ficha.id) || '';
+  const pedido = textoACentesimas(texto);
+  const nuevo = pedido.ok ? calcularNuevo(preparada, pedido.centesimas) : null;
+  const origen = nuevo ? nuevo.filas.map((f, i) => ({ ...f, nombre: preparada.zonas[i].nombre, pct: nuevo.pct[i] })) : preparada.zonas.map((z, i) => ({ ...z, pct: preparada.pct[i] }));
+  return { origen, pedido };
+}
+
+function exportarCsv(botella, ficha, preparada) {
+  const { origen } = filasExportables(ficha, preparada);
+  const csv = csvFicha({ titulo: `${botella.nombre} · ${ficha.ficha_codigo}`, filas: origen });
+  const nombre = 'zonas-corte.csv';
+  const puente = globalThis.SopladoraAndroid;
+  if (puente?.guardarArchivo) {
+    puente.guardarArchivo(nombre, 'text/csv', btoa(unescape(encodeURIComponent(csv))));
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = nombre;
+  a.click();
+}
+
+async function compartirResultado(botella, ficha, preparada) {
+  const { origen, pedido } = filasExportables(ficha, preparada);
+  const lineas = origen.map((f) => `${f.nombre}: ${formatoGramos(f.medioC)} g`);
+  const texto = [`${botella.nombre}`, ficha.ficha_codigo, pedido.ok ? `Gramaje ${formatoGramos(pedido.centesimas)} g` : 'Gramaje patrón', ...lineas].join('\n');
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: botella.nombre, text: texto });
+      return;
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+    }
+  }
+  try { await navigator.clipboard.writeText(texto); } catch { /* el dispositivo no permite copiar */ }
+}
+
+function alternarFavorito(id) {
+  const i = memoria.favoritos.indexOf(id);
+  if (i >= 0) memoria.favoritos.splice(i, 1);
+  else memoria.favoritos.push(id);
+  guardarMemoria(memoria);
+  pintar();
+}
+
+function alternarComparar(id) {
+  const i = memoria.comparar.indexOf(id);
+  if (i >= 0) memoria.comparar.splice(i, 1);
+  else memoria.comparar = [...memoria.comparar, id].slice(-2);
+  guardarMemoria(memoria);
+  ir('#/comparar');
+}
+
+function vistaComparar() {
+  const ids = memoria.comparar || [];
+  const sec = el('section', { class: 'comparar-fichas' }, [
+    el('h1', {}, 'Comparar fichas'),
+    el('p', { class: 'lead' }, 'Elige hasta dos fichas con el botón Comparar.'),
+  ]);
+  if (!ids.length) return sec;
+  const rejilla = el('div', { class: 'comparar-grid' });
+  for (const id of ids) {
+    const encontrado = localizar(id);
+    if (!encontrado) continue;
+    const { botella, ficha } = encontrado;
+    const preparada = prepararFicha(ficha);
+    const pedido = textoACentesimas(state.gramajes.get(id) || '');
+    const nuevo = pedido.ok ? calcularNuevo(preparada, pedido.centesimas) : null;
+    rejilla.append(el('article', { class: 'comparar-panel' }, [
+      el('h2', {}, botella.nombre),
+      el('p', {}, ficha.ficha_codigo),
+      tablaZonas('patrón', preparada.zonas, preparada.pct, preparada),
+      nuevo ? tablaZonas('nuevo', nuevo.filas, nuevo.pct, nuevo, preparada.zonas) : null,
+      el('button', { type: 'button', class: 'btn btn-ghost', onclick: () => ir(`#/ficha/${id}`) }, 'Abrir ficha'),
+    ]));
+  }
+  sec.append(rejilla);
+  return sec;
+}
+
 function arrancar() {
   registrarSW();
+  if (sessionStorage.getItem('sopladora-portada')) {
+    abrirSesion();
+    return;
+  }
+  sessionStorage.setItem('sopladora-portada', '1');
   pintarPortada();
   const espera = REDUCE ? 400 : 2000;
   const timer = setTimeout(continuar, espera);

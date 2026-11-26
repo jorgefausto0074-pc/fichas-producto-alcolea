@@ -24,6 +24,11 @@ export function aCentesimasNumero(n) {
 export function textoACentesimas(texto) {
   const t = String(texto ?? '').trim().replace(/\s+/g, '').replace(',', '.');
   if (!t) return { ok: false, motivo: 'vacio' };
+  if (/^\d+\.$/.test(t)) {
+    const cents = Number(t.slice(0, -1)) * 100;
+    if (cents <= 0) return { ok: false, motivo: 'no-positivo' };
+    return { ok: true, centesimas: cents, parcial: true, redondeado: false };
+  }
   if (!/^\d+(\.\d+)?$/.test(t)) return { ok: false, motivo: 'formato' };
   const [ent, dec = ''] = t.split('.');
   if (ent.length > 6) return { ok: false, motivo: 'formato' };
@@ -46,6 +51,21 @@ export function formatoPct(unidades) {
   const neg = unidades < 0;
   const v = Math.abs(Math.trunc(unidades));
   return `${neg ? '−' : ''}${Math.floor(v / 100)},${String(v % 100).padStart(2, '0')}`;
+}
+
+export function juicioMedida(cents, minC, maxC) {
+  if (cents == null || !Number.isFinite(cents)) return 'vacio';
+  if (cents < minC - 20 || cents > maxC + 20) return 'extremo';
+  if (cents < minC || cents > maxC) return 'fuera';
+  return 'dentro';
+}
+
+export function clasificarMedida(texto, minC, maxC) {
+  const pedido = textoACentesimas(texto);
+  if (pedido.ok) return juicioMedida(pedido.centesimas, minC, maxC);
+  const t = String(texto ?? '').trim().replace(',', '.');
+  if (/^\d+(\.\d+)?$/.test(t) && Number(t) === 0) return 'extremo';
+  return 'vacio';
 }
 
 export function fueraDeLoHabitual(nC, patronC) {

@@ -3,6 +3,7 @@ export function normalizar(valor) {
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
     .toLowerCase()
+    .replace(/(\d)\.(\d)/g, '$1,$2')
     .replace(/\s+/g, ' ')
     .trim();
 }
