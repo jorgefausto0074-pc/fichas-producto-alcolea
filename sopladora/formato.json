@@ -1,0 +1,19 @@
+{
+ "formato": "RPTB",
+ "version_contenedor": 1,
+ "iteraciones": 600000,
+ "sal_hex": "6674687dd8ec4332f1cd3e14e82752ce",
+ "iv_hex": "4bc5841437faca79b9117d05",
+ "tipo": "sopladora",
+ "sha256_datos_enc": "726b24f94bcdbcc99857ee37cb4f5656b4866eb2015036cc2beb7c96f5d14de7",
+ "edicion": "15",
+ "fecha_portada": "24/11/2026",
+ "fuentes": [
+  "Ed. 15 · adjunto 26/11/2026"
+ ],
+ "recuentos": {
+  "botellas": 13,
+  "fichas": 14,
+  "imagenes": 13
+ }
+}
