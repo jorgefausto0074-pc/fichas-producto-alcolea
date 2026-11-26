@@ -1,0 +1,32 @@
+name: Pruebas Calculadora Sopladora
+
+on:
+  pull_request:
+    paths:
+      - "sopladora/**"
+      - ".github/workflows/sopladora-ci.yml"
+      - "tests/actualizar.mjs"
+  push:
+    branches: [main]
+    paths:
+      - "sopladora/**"
+      - ".github/workflows/sopladora-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Cifrado de prueba y sintaxis
+        run: node sopladora/tests/cifrado.mjs
+
+      - name: Fichas de producto sigue pasando sus pruebas de actualización
+        run: node tests/actualizar.mjs

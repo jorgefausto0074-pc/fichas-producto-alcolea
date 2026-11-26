@@ -1,0 +1,54 @@
+name: Cifrar Calculadora Sopladora
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cifrar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Comprobar el secreto y el paquete ya cifrado
+        env:
+          PT_PASSWORD: ${{ secrets.PT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PT_PASSWORD}" ]; then
+            echo "Falta el secreto PT_PASSWORD." >&2
+            exit 1
+          fi
+          if [ ! -f sopladora/datos.enc ] || [ ! -f sopladora/formato.json ]; then
+            echo "Todavía no están sopladora/datos.enc y sopladora/formato.json." >&2
+            echo "Jorge los genera en su ordenador con la contraseña (no se sube el JSON en claro):" >&2
+            echo "  1. Abre sopladora/preparar.html en el navegador (o la página publicada /sopladora/preparar.html)." >&2
+            echo "  2. Elige botellas.json y las fotos de las botellas." >&2
+            echo "  3. Escribe la contraseña de Fichas. El cifrado ocurre en el navegador." >&2
+            echo "  4. Descarga datos.enc y formato.json, colócalos en sopladora/ y súbelos a main." >&2
+            echo "Equivalente en terminal, con los archivos fuera del repositorio:" >&2
+            echo "  PT_PASSWORD='…' node sopladora/tools/cifrar.mjs --datos /ruta/botellas.json --fotos /ruta/fotos --salida sopladora" >&2
+            exit 1
+          fi
+          node --input-type=module -e '
+            import { readFileSync } from "fs";
+            import { abrirPaquete } from "./sopladora/js/descifrar.js";
+            const password = process.env.PT_PASSWORD;
+            const formato = JSON.parse(readFileSync("sopladora/formato.json", "utf8"));
+            const enc = readFileSync("sopladora/datos.enc");
+            const paquete = await abrirPaquete(password, formato, enc.buffer.slice(enc.byteOffset, enc.byteOffset + enc.byteLength));
+            const n = paquete.doc.botellas.reduce((s, b) => s + b.fichas.length, 0);
+            if (n !== 14 || paquete.indice.tipo !== "sopladora") {
+              console.error("El paquete no abre como Calculadora Sopladora.");
+              process.exit(1);
+            }
+            console.log("El paquete publicado abre con PT_PASSWORD. Fichas: " + n + ". No se imprimen gramajes.");
+          '

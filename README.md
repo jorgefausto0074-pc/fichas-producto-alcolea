@@ -43,6 +43,14 @@ Para cambiar el token o la clave de actualización, vuelve a ejecutar el comando
 
 El detalle del extractor está en `updater/README_ACTUALIZADOR.md`.
 
+## Calculadora Sopladora
+
+En `sopladora/` está la calculadora de zonas de corte (misma contraseña, otro paquete cifrado, otra PWA y otro APK). No cambia esta aplicación. El uso y cómo publicar sus datos están en `sopladora/README.md`. Dirección: https://jorgefausto0074-pc.github.io/fichas-producto-alcolea/sopladora/
+
+## Calculadora Sopladora
+
+En `sopladora/` está la calculadora de zonas de corte (misma contraseña, otro paquete cifrado, otra PWA y otro APK). No cambia esta aplicación. El uso y cómo publicar sus datos están en `sopladora/README.md`. Dirección: https://jorgefausto0074-pc.github.io/fichas-producto-alcolea/sopladora/
+
 ## Qué hay en el repositorio
 
 | Fichero | Para qué |

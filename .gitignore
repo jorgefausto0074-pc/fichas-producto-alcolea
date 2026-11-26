@@ -22,3 +22,11 @@ android/.idea/
 /actualizacion/
 /out/
 updater/.venv/
+
+# Calculadora Sopladora: el JSON y las fotos no se versionan; el APK tampoco
+sopladora/privado/
+sopladora/android/.gradle/
+sopladora/android/build/
+sopladora/android/app/build/
+sopladora/android/local.properties
+sopladora/android/.idea/

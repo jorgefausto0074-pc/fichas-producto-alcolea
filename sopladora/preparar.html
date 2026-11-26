@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#071A40">
+  <title>Cifrar datos · Calculadora Sopladora</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body class="en-app">
+  <main class="preparar">
+    <article class="preparar-card">
+      <img class="login-logo" src="../img/marca2026/refresco-logo-naranja.png" alt="Refresco">
+      <p class="kicker">Refresco Iberia · Alcolea</p>
+      <h1>Cifrar el paquete</h1>
+      <p class="lead">La contraseña no sale de este dispositivo y no se envía a ningún servidor. El archivo con las fichas y las fotos tampoco se suben: el cifrado se hace aquí y solo se descargan <strong>datos.enc</strong> y <strong>formato.json</strong>.</p>
+      <form id="form">
+        <label for="json">botellas.json</label>
+        <input id="json" name="json" type="file" accept="application/json,.json" required>
+        <label for="fotos">Fotos de las botellas (las de las diapositivas)</label>
+        <input id="fotos" name="fotos" type="file" accept="image/*" multiple required>
+        <label for="clave">Contraseña de Fichas de producto</label>
+        <input id="clave" name="clave" type="password" autocomplete="current-password" required>
+        <div class="acciones">
+          <button class="btn btn-primary" type="submit">Cifrar en este dispositivo</button>
+          <a class="btn btn-ghost" href="./">Volver a la calculadora</a>
+        </div>
+      </form>
+      <p id="estado" class="hint" role="status"></p>
+      <div id="descargas" class="acciones" hidden></div>
+    </article>
+  </main>
+  <script type="module" src="js/preparar.js"></script>
+</body>
+</html>
