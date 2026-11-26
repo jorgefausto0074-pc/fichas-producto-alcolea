@@ -1,4 +1,4 @@
-const SHELL = 'sopladora-shell-v4';
+const SHELL = 'sopladora-shell-v5';
 const DATOS = 'sopladora-datos-v1';
 const BASE = new URL('./', self.location);
 
@@ -8,6 +8,7 @@ const SHELL_FILES = [
   'css/app.css',
   'js/app.js',
   'js/calculo.js',
+  'js/foto.js',
   'js/buscar.js',
   'js/descifrar.js',
   'js/sesion.js',

@@ -1,6 +1,7 @@
 import { abrirPaquete, descifrarConClave, derivarClave } from './descifrar.js';
 import { borrarClave, guardarClave, leerClave } from './sesion.js';
 import { botellaVisible, textoCapacidad, textoGas } from './buscar.js';
+import { refrescarFoto } from './foto.js';
 import {
   calcularNuevo,
   fichasPlanas,
@@ -640,23 +641,9 @@ function rellenarResultado(caja, ficha, preparada) {
   const extremos = recuadroExtremos(preparada, nuevo);
   if (abierto) extremos.open = true;
   caja.append(extremos);
-  refrescarFoto(preparada, nuevo);
+  refrescarFoto(caja, preparada, nuevo);
   const campo = document.getElementById('nuevo-gramaje');
   if (campo) campo.setAttribute('aria-invalid', texto.trim() && !pedido.ok ? 'true' : 'false');
-}
-
-function refrescarFoto(preparada, nuevo) {
-  document.querySelectorAll('[data-peso]').forEach((nodo) => {
-    const i = Number(nodo.dataset.peso);
-    const medio = nuevo ? nuevo.filas[i].medioC : preparada.zonas[i].medioC;
-    if (nodo.classList.contains('seg')) {
-      const total = (nuevo ? nuevo.filas : preparada.zonas).reduce((s, f) => s + (f.medioC), 0) || 1;
-      nodo.style.height = `${(medio / total) * 100}%`;
-    } else {
-      const nombre = preparada.zonas[i]?.nombre;
-      nodo.textContent = nodo.dataset.banda ? `${nombre} ${formatoGramos(medio)} g` : `${formatoGramos(medio)} g`;
-    }
-  });
 }
 
 function calculadora(ficha, texto, preparada) {

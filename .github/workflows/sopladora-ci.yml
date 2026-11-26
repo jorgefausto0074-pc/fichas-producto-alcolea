@@ -31,5 +31,8 @@ jobs:
       - name: Una ficha nueva de prueba no bloquea la auditoría
         run: node sopladora/tests/ficha15.mjs
 
+      - name: Cambiar de una ficha de 4 zonas a una de 3
+        run: node sopladora/tests/cambio-ficha.mjs
+
       - name: Fichas de producto sigue pasando sus pruebas de actualización
         run: node tests/actualizar.mjs
