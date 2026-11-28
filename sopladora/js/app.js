@@ -822,10 +822,7 @@ function columnaFoto(botella, ficha, preparada, nuevo) {
   }
   const visor = el('div', { class: 'visor' }, [marco, franjas]);
   const distinto = nuevo && (nuevo.ajustado || nuevo.filas.some((f, i) => f.medioC !== preparada.zonas[i].medioC));
-  const leyenda = el('p', { class: 'leyenda-reparto', 'data-leyenda-reparto': '1' }, [
-    distinto ? 'Reparto del gramaje nuevo' : 'Reparto del gramaje patrón',
-    escala.aEscala ? '' : ' · No a escala',
-  ]);
+  const leyenda = el('p', { class: 'leyenda-reparto', 'data-leyenda-reparto': '1' }, distinto ? 'Reparto del gramaje nuevo' : 'Reparto del gramaje patrón');
   const listaCortes = el('p', { class: 'cortes' }, [
     'Alturas de corte: ',
     [...(ficha.cortes_cm || [])].map(Number).filter((n) => Number.isFinite(n)).sort((a, b) => b - a).map((c) => textoCorte(c)).join(' · ') || 'sin cortes',
