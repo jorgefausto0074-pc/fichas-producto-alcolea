@@ -713,13 +713,8 @@ function vistaFicha(id) {
   const cuerpo = el('div', { class: 'ficha-grid' });
   cuerpo.append(columnaFoto(botella, ficha, preparada, nuevo));
   const datos = el('div', { class: 'ficha-datos' });
+  datos.append(tarjetaPatron(preparada));
   datos.append(calculadora(ficha, texto, preparada));
-  datos.append(
-    el('h2', {}, 'Gramaje patrón'),
-    el('p', { class: 'lead' }, `El objetivo de cada zona es el medio. El gramaje patrón de la ficha es la suma de los medios: ${formatoGramos(preparada.sumaC)} g.`),
-    tablaZonas('patrón', preparada.zonas, preparada.pct, preparada),
-    el('p', { class: 'suma', 'data-suma-zonas': String(preparada.sumaC) }, `Suma de zonas = ${formatoGramos(preparada.sumaC)} g`),
-  );
   const caja = el('div', { id: 'resultado-gramaje' });
   rellenarResultado(caja, ficha, preparada);
   datos.append(caja);
@@ -828,6 +823,20 @@ function columnaFoto(botella, ficha, preparada, nuevo) {
     [...(ficha.cortes_cm || [])].map(Number).filter((n) => Number.isFinite(n)).sort((a, b) => b - a).map((c) => textoCorte(c)).join(' · ') || 'sin cortes',
   ]);
   return el('div', { class: 'col-foto' }, [visor, leyenda, listaCortes]);
+}
+
+function tarjetaPatron(preparada) {
+  const zona = preparada.zonas[0];
+  return el('section', { class: 'tarjeta-patron' }, [
+    el('h2', {}, 'Gramaje patrón'),
+    el('p', { class: 'lead' }, `El objetivo de cada zona es el medio. El gramaje patrón de la ficha es la suma de los medios: ${formatoGramos(preparada.sumaC)} g.`),
+    tablaZonas('patrón', preparada.zonas, preparada.pct, preparada),
+    el('p', { class: 'suma', 'data-suma-zonas': String(preparada.sumaC) }, `Suma de zonas = ${formatoGramos(preparada.sumaC)} g`),
+    el('aside', { class: 'nota-extremo' }, [
+      el('p', {}, 'Valor extremo: el máximo extremo de cada zona es el máximo + 0,20 g y el mínimo extremo es el mínimo − 0,20 g.'),
+      zona ? el('p', { class: 'nota-ejemplo' }, `${zona.nombre}, de ${formatoGramos(zona.minMinC)} a ${formatoGramos(zona.maxMaxC)} g.`) : null,
+    ]),
+  ]);
 }
 
 function tablaZonas(cual, filas, pct, totales, zonasNombre) {
