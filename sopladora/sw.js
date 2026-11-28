@@ -1,4 +1,4 @@
-const SHELL = 'sopladora-shell-v7';
+const SHELL = 'sopladora-shell-v8';
 const DATOS = 'sopladora-datos-v1';
 const BASE = new URL('./', self.location);
 

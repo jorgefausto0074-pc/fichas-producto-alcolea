@@ -25,6 +25,7 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { margin: 0; min-height: 100%; }
+html { scroll-padding-top: calc(var(--cabecera, 5rem) + 8px); }
 body.en-app {
   background:
     radial-gradient(900px 420px at 110% -10%, rgba(8, 61, 196, .16), transparent 55%),
@@ -192,9 +193,11 @@ a { color: var(--blue); }
 .ficha-titulo h1 { margin: .15rem 0; letter-spacing: -.03em; font-size: clamp(1.5rem, 3vw, 2.1rem); }
 .codigo { margin: 0 0 .8rem; color: var(--muted); font-weight: 700; }
 .ficha-grid { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: 18px; align-items: start; min-width: 0; }
-.col-foto { grid-column: 1; grid-row: 1 / span 2; }
+.col-foto { grid-column: 1; grid-row: 1; align-self: start; scroll-margin-top: calc(var(--cabecera, 5rem) + 8px); }
 .ficha-datos { grid-column: 2; grid-row: 1; }
-.ficha-grid > .calculadora { grid-column: 2; grid-row: 2; }
+@media (min-width: 801px) {
+  .col-foto { position: sticky; top: calc(var(--cabecera, 5rem) + 8px); z-index: 4; }
+}
 .ficha-datos, .col-foto, .extremos, .calculadora, .cmp-zona, .cmp-nombre { min-width: 0; max-width: 100%; }
 .foto-marco { position: relative; background: var(--ice-soft); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
 .foto { display: block; width: 100%; height: auto; max-height: 70vh; object-fit: contain; margin: 0 auto; }
@@ -208,12 +211,13 @@ a { color: var(--blue); }
   display: flex; flex-direction: column; min-width: 0;
 }
 .franja {
-  display: flex; flex-flow: row wrap; align-items: center; align-content: center; gap: .1rem .35rem;
-  min-width: 0; min-height: 0; padding: .2rem .45rem .2rem .55rem;
+  display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+  gap: .04rem; min-width: 0; min-height: 0; padding: .2rem .35rem .2rem .65rem;
 }
-.franja-nombre, .franja-grueso { font-size: .75rem; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
-.franja-grueso { flex-basis: 100%; font-weight: 400; }
-.franja strong { font-size: 1rem; line-height: 1.15; }
+.franja-nombre { font-size: .8rem; font-weight: 700; line-height: 1.15; }
+.franja strong { font-size: .95rem; line-height: 1.15; }
+.franja-grueso { font-size: .75rem; font-weight: 400; line-height: 1.15; }
+.nowrap { white-space: nowrap; }
 .corte-marca {
   position: absolute; left: 0; z-index: 2; transform: translate(-62%, -50%);
   background: #fff; color: var(--navy); border: 1px solid var(--navy);
@@ -306,28 +310,47 @@ body.linea .gramaje-grande { font-size: 2.1rem; }
 body.linea .tarjeta, body.linea .calculadora, body.linea .tabla-scroll { border: 2px solid var(--navy); }
 
 .extremos {
-  margin-top: 1rem; background: var(--warn-bg); border: 2px solid var(--orange);
+  margin-top: 1rem; background: #fff; border: 1px solid var(--grey);
   border-radius: var(--radius); padding: .2rem .8rem .8rem;
 }
+.extremos.alerta { background: var(--warn-bg); border: 2px solid var(--orange); }
 .extremos summary {
   cursor: pointer; font-weight: 800; min-height: var(--tap); display: flex; align-items: center; gap: .5rem;
   color: var(--navy);
 }
 .aviso-ico {
-  width: 1.4rem; height: 1.4rem; border-radius: 50%; background: var(--orange); color: var(--navy);
+  width: 1.4rem; height: 1.4rem; border-radius: 50%; background: var(--grey); color: var(--navy);
   display: inline-grid; place-items: center; font-weight: 800;
 }
+.extremos.alerta .aviso-ico { background: var(--orange); }
 .extremos .tabla-scroll { background: #fff; }
 .notas { background: #fff; border-radius: var(--radius); padding: .2rem 1rem .8rem; box-shadow: var(--shadow); }
 .resumen-scroll {
-  overflow: auto; max-width: 100%; max-height: 70vh; min-width: 0;
+  overflow: auto; max-width: 100%; max-height: none; min-width: 0;
   background: #fff; border-radius: 14px; box-shadow: var(--shadow);
 }
 .tabla.tabla-resumen { table-layout: auto; width: max-content; min-width: 100%; }
-.tabla-resumen thead th { position: sticky; top: 0; background: #fff; z-index: 2; white-space: nowrap; }
-.tabla-resumen td, .tabla-resumen tbody th { white-space: nowrap; }
-.th-zona { min-width: 7rem; }
-.barra-zona { display: block; height: 6px; border-radius: 99px; margin-bottom: .25rem; }
+.tabla-resumen thead th {
+  position: sticky; top: 0; background: #fff; z-index: 2;
+  font-size: .75rem; line-height: 1.2; white-space: nowrap;
+}
+.tabla-resumen td, .tabla-resumen th { white-space: nowrap; vertical-align: middle; }
+.ref-celda { text-align: left; white-space: normal; max-width: 11rem; }
+.ref-celda .enlace-ficha { min-height: 0; white-space: normal; text-align: left; line-height: 1.2; }
+.cortes-celda { font-size: .75rem; line-height: 1.25; white-space: normal; max-width: 7.5rem; }
+.barra-zona { display: block; height: 4px; border-radius: 99px; margin-bottom: .2rem; }
+.mini-pct { display: inline-block; width: .55rem; height: .55rem; border-radius: 2px; margin-right: .2rem; vertical-align: middle; }
+.pct-celda { text-align: right; }
+@media (min-width: 801px) {
+  .resumen-scroll { overflow: visible; }
+  .tabla.tabla-resumen { table-layout: fixed; width: 100%; }
+  .tabla-resumen thead th { white-space: normal; top: var(--cabecera, 0); }
+  .tabla-resumen td, .tabla-resumen tbody th { white-space: normal; }
+  .ref-celda { width: 20%; }
+  .cap-celda { width: 8%; }
+  .cortes-celda { width: 14%; }
+  .th-zona, .pct-celda { width: 11%; }
+}
 .bloque-gas th { background: var(--navy); color: #fff; letter-spacing: .04em; }
 .bloque-gas.sin_gas th { background: var(--blue); color: #fff; }
 .media-bloque th, .media-bloque td { background: var(--ice-soft); font-weight: 800; }
@@ -358,9 +381,15 @@ body.linea .tarjeta, body.linea .calculadora, body.linea .tabla-scroll { border:
   .calc-par { grid-template-columns: minmax(0, 1fr); }
   .visor .foto-marco { margin-right: 8.2rem; }
   .visor-zonas { width: 8.2rem; }
-  .col-foto { order: 1; }
-  .ficha-grid > .calculadora { order: 2; }
-  .ficha-datos { order: 3; }
+  .col-foto, .ficha-datos { display: contents; }
+  .visor { order: 1; }
+  .calculadora { order: 2; }
+  .leyenda-reparto, .cortes { order: 3; }
+  .ficha-datos > *:not(.calculadora) { order: 4; }
+  .col-foto { position: static; }
+  .resumen-scroll { overflow: auto; max-height: 70vh; }
+  .tabla.tabla-resumen { table-layout: auto; width: max-content; min-width: 100%; }
+  .tabla-resumen td, .tabla-resumen th { white-space: nowrap; }
   .comparar-grid { grid-template-columns: minmax(0, 1fr); }
   .rejilla { grid-template-columns: minmax(0, 1fr); }
   .tabla th, .tabla td { padding: .4rem .3rem; font-size: .78rem; }

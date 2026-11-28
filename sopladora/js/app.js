@@ -16,6 +16,7 @@ import {
   clasificarMedida,
   prepararFicha,
   textoACentesimas,
+  textoVariacion,
 } from './calculo.js';
 
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -345,6 +346,13 @@ function pintarAhora() {
   else raiz.append(vistaLista());
   raiz.append(pie());
   app().replaceChildren(raiz);
+  medirCabecera();
+}
+
+function medirCabecera() {
+  const barra = document.querySelector('.topbar');
+  const alto = barra ? Math.ceil(barra.getBoundingClientRect().height) : 0;
+  if (alto) document.documentElement.style.setProperty('--cabecera', `${alto}px`);
 }
 
 function cabecera() {
@@ -647,6 +655,7 @@ function vistaFicha(id) {
   const cuerpo = el('div', { class: 'ficha-grid' });
   cuerpo.append(columnaFoto(botella, ficha, preparada, nuevo));
   const datos = el('div', { class: 'ficha-datos' });
+  datos.append(calculadora(ficha, texto, preparada));
   datos.append(
     el('h2', {}, 'Gramaje patrón'),
     el('p', { class: 'lead' }, `El objetivo de cada zona es el medio. El gramaje patrón de la ficha es la suma de los medios: ${formatoGramos(preparada.sumaC)} g.`),
@@ -657,7 +666,6 @@ function vistaFicha(id) {
   rellenarResultado(caja, ficha, preparada);
   datos.append(caja);
   datos.append(historialFicha());
-  cuerpo.append(calculadora(ficha, texto, preparada));
   if (ficha.notas?.length) {
     datos.append(el('section', { class: 'notas' }, [
       el('h2', {}, 'Notas de la ficha'),
@@ -695,7 +703,10 @@ function textoGrueso(zona) {
   if (zona.clave !== 'hombro' && zona.clave !== 'cuerpo') return '';
   if (zona.g_min_mm == null && zona.g_max_mm == null) return '';
   if (zona.g_min_mm != null && zona.g_max_mm != null) {
-    return `Hombro grueso ${textoMm(zona.g_min_mm)} – ${textoMm(zona.g_max_mm)} mm`;
+    return el('span', { class: 'franja-grueso' }, [
+      'Hombro grueso ',
+      el('span', { class: 'nowrap' }, `${textoMm(zona.g_min_mm)}–${textoMm(zona.g_max_mm)} mm`),
+    ]);
   }
   const unico = zona.g_min_mm != null ? zona.g_min_mm : zona.g_max_mm;
   return `Hombro grueso ${textoMm(unico)} mm`;
@@ -713,7 +724,7 @@ function columnaFoto(botella, ficha, preparada, nuevo) {
     franjas.append(el('div', { class: `franja zona-${z.clave}`, style: `height:${alturas[i]}%;flex:none` }, [
       el('span', { class: 'franja-nombre' }, z.nombre),
       el('strong', { 'data-peso': String(i) }, `${formatoGramos(medio)} g`),
-      grueso ? el('span', { class: 'franja-grueso' }, grueso) : null,
+      grueso,
     ]));
   });
   const cortes = [...(ficha.cortes_cm || [])].map(Number).filter((n) => Number.isFinite(n)).sort((a, b) => b - a);
@@ -724,29 +735,13 @@ function columnaFoto(botella, ficha, preparada, nuevo) {
     franjas.append(el('span', { class: 'corte-marca', style: `top:${acum}%` }, textoCorte(corte)));
   });
   const visor = el('div', { class: 'visor' }, [marco, franjas]);
+  const distinto = nuevo && (nuevo.ajustado || nuevo.filas.some((f, i) => f.medioC !== preparada.zonas[i].medioC));
+  const leyenda = el('p', { class: 'leyenda-reparto', 'data-leyenda-reparto': '1' }, distinto ? 'Reparto del gramaje nuevo' : 'Reparto del gramaje patrón');
   const listaCortes = el('p', { class: 'cortes' }, [
     'Alturas de corte: ',
     [...(ficha.cortes_cm || [])].map(Number).filter((n) => Number.isFinite(n)).sort((a, b) => b - a).map((c) => textoCorte(c)).join(' · ') || 'sin cortes',
   ]);
-  return el('div', { class: 'col-foto' }, [visor, listaCortes, barraPesos(preparada, nuevo)]);
-}
-
-function barraPesos(preparada, nuevo) {
-  const medios = preparada.zonas.map((z, i) => (nuevo ? nuevo.filas[i].medioC : z.medioC));
-  const total = medios.reduce((a, b) => a + b, 0) || 1;
-  const barra = el('div', { class: 'barra-apilada', 'aria-hidden': 'true' });
-  preparada.zonas.forEach((z, i) => {
-    barra.append(el('div', {
-      class: `seg zona-${z.clave}`,
-      style: `height:${(medios[i] / total) * 100}%`,
-      title: z.nombre,
-      'data-peso': String(i),
-    }));
-  });
-  return el('div', { class: 'barra-caja' }, [
-    el('p', { class: 'hint', 'data-leyenda-reparto': '1' }, nuevo ? 'Reparto del gramaje nuevo' : 'Reparto del gramaje patrón'),
-    barra,
-  ]);
+  return el('div', { class: 'col-foto' }, [visor, leyenda, listaCortes]);
 }
 
 function tablaZonas(cual, filas, pct, totales, zonasNombre) {
@@ -818,7 +813,7 @@ function rellenarResultado(caja, ficha, preparada) {
     caja.append(el('p', { class: 'error', role: 'alert' }, 'Escribe el gramaje en gramos. Vale la coma o el punto: 40,4 o 40.4.'));
   }
   caja.append(pesosMedidos(ficha, preparada, nuevo));
-  const extremos = recuadroExtremos(preparada, nuevo);
+  const extremos = recuadroExtremos(ficha, preparada, nuevo);
   if (abierto) extremos.open = true;
   caja.append(extremos);
   const leyenda = caja.closest('article.ficha')?.querySelector('[data-leyenda-reparto]');
@@ -949,15 +944,15 @@ function comparativa(preparada, nuevo) {
   );
   const lista = el('div', { class: 'cmp' });
   preparada.zonas.forEach((z, i) => {
-    const antes = z.medioC;
-    const despues = nuevo.filas[i].medioC;
-    const delta = despues - antes;
+    const linea = textoVariacion(preparada, nuevo, i);
+    const antes = linea.antes;
+    const despues = linea.despues;
     lista.append(el('div', { class: 'cmp-zona' }, [
       el('div', { class: 'cmp-nombre' }, [
         el('span', { class: `punto zona-${z.clave}` }),
         el('strong', {}, z.nombre),
-        el('span', { class: 'variacion' }, `${formatoGramos(antes)} g · ${formatoPct(preparada.pct[i])} % → ${formatoGramos(despues)} g · ${formatoPct(nuevo.pct[i])} %`),
-        el('span', { class: delta === 0 ? 'delta cero' : 'delta' }, `${formatoGramos(delta, { signo: true })} g`),
+        el('span', { class: 'variacion', 'data-variacion': String(i) }, linea.texto),
+        el('span', { class: linea.delta === 0 ? 'delta cero' : 'delta' }, `${formatoGramos(linea.delta, { signo: true })} g`),
       ]),
       el('div', { class: 'cmp-barras' }, [
         barra('Patrón', antes, maximo, 'antes'),
@@ -982,7 +977,15 @@ function barra(etiqueta, valor, maximo, clase) {
   ]);
 }
 
-function recuadroExtremos(preparada, nuevo) {
+function extremosAlerta(ficha, preparada, nuevo) {
+  const medidos = memoria.medidos?.[ficha.id] || {};
+  return preparada.zonas.some((z, i) => {
+    const lim = nuevo ? nuevo.filas[i] : z;
+    return clasificarMedida(medidos[z.clave] || '', lim.minC, lim.maxC) === 'extremo';
+  });
+}
+
+function recuadroExtremos(ficha, preparada, nuevo) {
   const filas = preparada.zonas.map((z, i) => ({
     nombre: z.nombre,
     minMin: z.minMinC,
@@ -1015,7 +1018,7 @@ function recuadroExtremos(preparada, nuevo) {
     cuerpo.append(el('tr', {}, celdas));
   }
   tabla.append(cuerpo);
-  return el('details', { class: 'extremos' }, [
+  return el('details', { class: extremosAlerta(ficha, preparada, nuevo) ? 'extremos alerta' : 'extremos' }, [
     el('summary', {}, [
       el('span', { class: 'aviso-ico', 'aria-hidden': 'true' }, '!'),
       'Valor extremo / excepcional',
@@ -1025,9 +1028,22 @@ function recuadroExtremos(preparada, nuevo) {
   ]);
 }
 
-function celdaPct(valor) {
-  if (valor == null) return el('td', { class: 'num' }, '—');
-  return el('td', { class: 'num', 'data-pct': String(valor) }, formatoPct(valor));
+function celdaPct(valor, clave) {
+  if (valor == null) return el('td', { class: 'num pct-celda' }, '—');
+  return el('td', { class: 'num pct-celda', 'data-pct': String(valor) }, [
+    clave ? el('span', { class: `mini-pct zona-${clave}`, 'aria-hidden': 'true' }) : null,
+    formatoPct(valor),
+  ]);
+}
+
+function textoCortesCompacto(cortes) {
+  const nums = [...(cortes || [])].map(Number).filter((n) => Number.isFinite(n)).sort((a, b) => b - a);
+  if (!nums.length) return '—';
+  const cuerpo = nums.map((n) => {
+    const [ent, dec] = String(n).split('.');
+    return dec ? `${ent},${dec}` : ent;
+  }).join(' · ');
+  return `${cuerpo} cm`;
 }
 
 function vistaMedias() {
@@ -1056,14 +1072,14 @@ function vistaMedias() {
     for (const fila of bloque.filas) {
       const suma = fila.pct.reduce((s, v) => s + (v || 0), 0);
       cuerpo.append(el('tr', { 'data-resumen': fila.id, 'data-suma-pct': String(suma) }, [
-        el('th', { scope: 'row' }, [
+        el('th', { scope: 'row', class: 'ref-celda' }, [
           el('button', { type: 'button', class: 'enlace-ficha', onclick: () => ir(`#/ficha/${fila.id}`) }, fila.nombre),
           el('span', { class: 'codigo-mini' }, fila.codigo),
         ]),
-        el('td', {}, textoCapacidad(fila.capacidad)),
+        el('td', { class: 'cap-celda' }, textoCapacidad(fila.capacidad)),
         el('td', { class: 'num' }, `${formatoGramos(fila.gramajeC)} g`),
-        el('td', {}, fila.cortes.length ? [...fila.cortes].map(Number).filter((n) => Number.isFinite(n)).sort((a, b) => b - a).map((c) => textoCorte(c)).join(' · ') : '—'),
-        ...fila.pct.map((v) => celdaPct(v)),
+        el('td', { class: 'cortes-celda' }, textoCortesCompacto(fila.cortes)),
+        ...fila.pct.map((v, i) => celdaPct(v, COLUMNAS_RESUMEN[i].id)),
       ]));
     }
     cuerpo.append(el('tr', { class: 'media-bloque' }, [
@@ -1113,6 +1129,9 @@ window.addEventListener('beforeinstallprompt', (ev) => {
 window.addEventListener('hashchange', () => {
   if (state.doc) pintar();
 });
+window.addEventListener('resize', () => {
+  if (state.doc) medirCabecera();
+});
 
 window.addEventListener('beforeprint', () => {
   document.querySelectorAll('details.extremos').forEach((d) => {
@@ -1142,13 +1161,15 @@ function actualizarBarras(sec, preparada, nuevo) {
     1,
   );
   sec.querySelectorAll('.cmp-zona').forEach((zona, i) => {
-    const antes = preparada.zonas[i].medioC;
-    const despues = nuevo.filas[i].medioC;
-    const delta = despues - antes;
+    const linea = textoVariacion(preparada, nuevo, i);
+    const antes = linea.antes;
+    const despues = linea.despues;
+    const variacion = zona.querySelector('.variacion');
+    if (variacion) variacion.textContent = linea.texto;
     const marca = zona.querySelector('.delta');
     if (marca) {
-      marca.textContent = `${formatoGramos(delta, { signo: true })} g`;
-      marca.className = delta === 0 ? 'delta cero' : 'delta';
+      marca.textContent = `${formatoGramos(linea.delta, { signo: true })} g`;
+      marca.className = linea.delta === 0 ? 'delta cero' : 'delta';
     }
     const rellenos = zona.querySelectorAll('.cmp-relleno');
     const nums = zona.querySelectorAll('.num');
@@ -1185,6 +1206,7 @@ function pesosMedidos(ficha, preparada, nuevo) {
             const fila = ev.target.closest('.medido');
             fila.className = `medido ${juicioNuevo}`;
             fila.querySelector('.juicio').textContent = textoJuicio(juicioNuevo);
+            document.querySelector('details.extremos')?.classList.toggle('alerta', extremosAlerta(ficha, preparada, nuevo));
           },
         }),
         el('span', { class: 'juicio' }, textoJuicio(juicio)),

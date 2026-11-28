@@ -153,6 +153,21 @@ export function calcularAjustado(preparada, nC, ajuste) {
   return { ok: true, filas, pct: pcts, sumaC: medios.reduce((a, b) => a + b, 0), ajustado: true };
 }
 
+export function textoVariacion(preparada, nuevo, i) {
+  const antes = preparada.zonas[i].medioC;
+  const despues = nuevo.filas[i].medioC;
+  const pctAntes = preparada.pct[i];
+  const pctDespues = nuevo.pct[i];
+  return {
+    antes,
+    despues,
+    pctAntes,
+    pctDespues,
+    delta: despues - antes,
+    texto: `${formatoGramos(antes)} g · ${formatoPct(pctAntes)} % → ${formatoGramos(despues)} g · ${formatoPct(pctDespues)} %`,
+  };
+}
+
 export const COLUMNAS_RESUMEN = [
   { id: 'hombro', titulo: 'Hombro / Superior' },
   { id: 'zona2', titulo: 'Zona 2' },

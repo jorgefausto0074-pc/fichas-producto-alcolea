@@ -1,7 +1,7 @@
 // Ajuste de una zona, resumen de medidas y quitar de la comparación.
 // La ficha de ejemplo usa los medios publicados de 1,5 L estándar. No toca datos.enc.
 
-import { calcularAjustado, filasResumen, prepararFicha, repartoMayorResto } from '../js/calculo.js';
+import { calcularAjustado, filasResumen, formatoGramos, formatoPct, prepararFicha, repartoMayorResto, textoVariacion } from '../js/calculo.js';
 
 const fallos = [];
 function ok(cond, msg) {
@@ -48,6 +48,14 @@ ok(al37.filas.every((f, i) => f.medioC === quiere37.medios[i]), 'los gramos sale
 ok(al37.filas[0].minC === al37.filas[0].medioC - (1170 - 1120), 'el mínimo conserva el margen en gramos');
 ok(al37.filas[0].maxC === al37.filas[0].medioC + (1220 - 1170), 'el máximo conserva el margen en gramos');
 ok(al37.filas[0].minMinC === al37.filas[0].minC - 20 && al37.filas[0].maxMaxC === al37.filas[0].maxC + 20, 'los extremos siguen a ±0,20 g');
+for (let i = 0; i < prep.zonas.length; i += 1) {
+  const linea = textoVariacion(prep, al37, i);
+  ok(linea.despues === al37.filas[i].medioC, `el texto de la zona ${i} usa el mismo gramaje que la tabla`);
+  ok(linea.pctDespues === al37.pct[i], `el texto de la zona ${i} usa el mismo % que la tabla`);
+  ok(linea.texto.includes(`${formatoGramos(al37.filas[i].medioC)} g`), `la línea incluye ${formatoGramos(al37.filas[i].medioC)}`);
+  ok(linea.texto.includes(`${formatoPct(al37.pct[i])} %`), `la línea incluye ${formatoPct(al37.pct[i])}`);
+}
+ok(textoVariacion(prep, al37, 0).texto.includes('37,00 %'), 'con el hombro al 37 % el texto no se queda en el % del patrón');
 
 const al12 = calcularAjustado(prep, N, { indice: 0, modo: 'gramos', valor: 1200 });
 const quiere12 = esperadoGramos(1200);
