@@ -15,3 +15,9 @@ export function csvFicha({ titulo, filas, nota }) {
   const cabecera = [titulo, nota].filter(Boolean);
   return [...cabecera, ...filasCsv].join('\r\n');
 }
+
+export function csvTurno(filas) {
+  const linea = (cols) => cols.join(';');
+  const cuerpo = (filas || []).map((f) => linea([f.fecha, f.codigo, f.zona, f.peso, f.juicio]));
+  return [linea(['Fecha', 'Ficha', 'Zona', 'Peso (g)', 'Juicio']), ...cuerpo].join('\r\n');
+}

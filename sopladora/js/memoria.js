@@ -10,6 +10,7 @@ const vacia = () => ({
   modoLinea: false,
   comparar: [],
   ajustes: {},
+  turno: [],
 });
 
 export function leerMemoria() {
@@ -50,6 +51,24 @@ export function quitarComparada(memoria, id) {
 
 export function vaciarComparacion(memoria) {
   memoria.comparar = [];
+  guardarMemoria(memoria);
+}
+
+export function anotarMedicion(memoria, entrada) {
+  memoria.turno = memoria.turno || [];
+  const previa = memoria.turno[0];
+  if (previa
+    && previa.fichaId === entrada.fichaId
+    && previa.zonaClave === entrada.zonaClave
+    && previa.peso === entrada.peso
+    && previa.juicio === entrada.juicio) return false;
+  memoria.turno = [entrada, ...memoria.turno].slice(0, 400);
+  guardarMemoria(memoria);
+  return true;
+}
+
+export function borrarTurno(memoria) {
+  memoria.turno = [];
   guardarMemoria(memoria);
 }
 

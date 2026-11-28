@@ -2,7 +2,7 @@
 
 import { botellaVisible } from '../js/buscar.js';
 import { calcularNuevo, clasificarMedida, juicioMedida, prepararFicha, textoACentesimas } from '../js/calculo.js';
-import { csvFicha } from '../js/csv.js';
+import { csvFicha, csvTurno } from '../js/csv.js';
 
 const fallos = [];
 function ok(cond, msg) {
@@ -48,6 +48,17 @@ ok(csv.includes('13,20'), 'coma decimal');
 ok(!csv.includes('13.20'), 'sin punto decimal');
 ok(csv.split('\r\n').every((linea) => !linea.includes(',"') ), 'separador de columnas es ;');
 
+const turnoCsv = csvTurno([{
+  fecha: '28/11/2026 08:15:00',
+  codigo: '1,5 L ESTANDAR-32,65',
+  zona: 'Hombro',
+  peso: '12,30',
+  juicio: 'OK',
+}]);
+ok(turnoCsv.startsWith('Fecha;Ficha;Zona;Peso (g);Juicio'), 'cabecera del registro de turno');
+ok(turnoCsv.includes('1,5 L ESTANDAR-32,65;Hombro;12,30;OK'), 'el turno separa con punto y coma');
+ok(turnoCsv.includes('12,30') && !turnoCsv.includes('12.30'), 'el turno usa coma decimal');
+
 const botella = {
   id: 'b1',
   nombre: '1,5 L Estándar',
@@ -71,6 +82,15 @@ ok(memoriaMod.leerMemoria().gramajes.s1 === '40,', 'recuerda el último gramaje'
 memoriaMod.anotarCalculo(memoria, { fecha: '2026-11-26T10:00:00.000Z', fichaId: 's1', codigo: 'PRUEBA', n: '40,00' });
 memoriaMod.borrarHistorial(memoria, 0);
 ok(memoriaMod.leerMemoria().historial.length === 0, 'se puede borrar el historial');
+const medicion = {
+  fecha: '28/11/2026 08:15:00', fichaId: 's1', codigo: 'PRUEBA', zona: 'Hombro', zonaClave: 'hombro', peso: '12,30', juicio: 'OK',
+};
+ok(memoriaMod.anotarMedicion(memoria, medicion) === true, 'guarda la medición del turno');
+ok(memoriaMod.leerMemoria().turno.length === 1, 'el turno queda en este dispositivo');
+ok(memoriaMod.anotarMedicion(memoria, { ...medicion, fecha: '28/11/2026 08:16:00' }) === false, 'no duplica la misma medición seguida');
+ok(memoriaMod.leerMemoria().turno.length === 1, 'sigue habiendo una sola medición');
+memoriaMod.borrarTurno(memoria);
+ok(memoriaMod.leerMemoria().turno.length === 0, 'borrar el turno deja el registro vacío');
 
 if (fallos.length) {
   console.error(fallos.join('\n'));

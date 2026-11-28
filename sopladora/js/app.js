@@ -3,8 +3,8 @@ import { borrarClave, guardarClave, leerClave } from './sesion.js';
 import { botellaVisible, textoCapacidad, textoGas } from './buscar.js';
 import { refrescarFoto } from './foto.js';
 import { tramosEscala } from './maqueta.js';
-import { anotarCalculo, borrarHistorial, guardarAjuste, guardarMemoria, leerMemoria, quitarComparada, recordarGramaje, vaciarComparacion } from './memoria.js';
-import { csvFicha } from './csv.js';
+import { anotarCalculo, anotarMedicion, borrarHistorial, borrarTurno, guardarAjuste, guardarMemoria, leerMemoria, quitarComparada, recordarGramaje, vaciarComparacion } from './memoria.js';
+import { csvFicha, csvTurno } from './csv.js';
 import { contarHasta } from './animar.js';
 import {
   calcularAjustado,
@@ -119,6 +119,7 @@ function ruta() {
   if (ficha) return { vista: 'ficha', id: ficha[1] };
   if (h === '/medias') return { vista: 'medias' };
   if (h === '/comparar') return { vista: 'comparar', id: null };
+  if (h === '/turno') return { vista: 'turno', id: null };
   return { vista: 'lista', id: null };
 }
 
@@ -349,6 +350,7 @@ function pintarAhora() {
   raiz.append(cabecera());
   if (r.vista === 'medias') raiz.append(vistaMedias());
   else if (r.vista === 'comparar') raiz.append(vistaComparar());
+  else if (r.vista === 'turno') raiz.append(vistaTurno());
   else if (r.vista === 'ficha') raiz.append(vistaFicha(r.id));
   else raiz.append(vistaLista());
   raiz.append(pie());
@@ -420,6 +422,7 @@ function cabecera() {
         },
       }, '⋯'),
       el('div', { id: 'menu-mas', class: 'menu-panel', hidden: true }, [
+        el('button', { type: 'button', class: 'btn btn-ghost', onclick: () => ir('#/turno') }, 'Turno'),
         el('button', {
           type: 'button',
           class: 'btn btn-ghost',
@@ -458,15 +461,17 @@ function pie() {
 }
 
 function vistaLista() {
-  const visibles = botellasVisibles();
+  const coincidencia = coincidencias();
   const cont = el('section', { class: 'lista' }, [
     el('div', { class: 'buscar-fila no-print' }, [
-      el('label', { class: 'sr', for: 'q' }, 'Buscar'),
+      el('label', { class: 'buscar-etiq', for: 'q' }, 'Código de ficha'),
       el('input', {
         id: 'q',
         class: 'buscar',
         type: 'search',
-        placeholder: 'Buscar por nombre, capacidad o gramaje',
+        inputmode: 'search',
+        enterkeyhint: 'search',
+        placeholder: 'Código, nombre o gramaje',
         value: state.q,
         autocomplete: 'off',
         oninput: (ev) => {
@@ -476,10 +481,34 @@ function vistaLista() {
       }),
     ]),
     filtros(),
-    el('p', { class: 'recuento' }, `${visibles.length} ${visibles.length === 1 ? 'botella' : 'botellas'}`),
+    el('button', { type: 'button', class: 'btn btn-secondary btn-turno', onclick: () => ir('#/turno') }, 'Registro del turno'),
+    el('p', { class: 'recuento' }, textoRecuento(coincidencia)),
   ]);
-  cont.append(nodoResultados(visibles));
+  cont.append(nodoResultados(coincidencia));
   return cont;
+}
+
+function textoRecuento(coincidencia) {
+  const n = coincidencia.items.length;
+  if (coincidencia.modo === 'fichas') return `${n} ${n === 1 ? 'ficha' : 'fichas'}`;
+  return `${n} ${n === 1 ? 'botella' : 'botellas'}`;
+}
+
+function coincidencias() {
+  if (!String(state.q || '').trim()) return { modo: 'botellas', items: botellasVisibles() };
+  const items = [];
+  for (const botella of state.doc.botellas) {
+    if (state.soloFavoritos && !botella.fichas.some((f) => memoria.favoritos.includes(f.id))) continue;
+    if (state.gas !== 'todas' && botella.gas !== state.gas) continue;
+    if (state.capacidad !== 'todas' && botella.capacidad_l !== state.capacidad) continue;
+    for (const ficha of botella.fichas) {
+      const sola = { ...botella, fichas: [ficha] };
+      if (botellaVisible(sola, { q: state.q, gas: 'todas', capacidad: 'todas', gramosDe: gramajeDe })) {
+        items.push({ botella, ficha });
+      }
+    }
+  }
+  return { modo: 'fichas', items };
 }
 
 function botellasVisibles() {
@@ -494,25 +523,35 @@ function botellasVisibles() {
   });
 }
 
-function nodoResultados(visibles) {
-  if (!visibles.length) {
+function nodoResultados(coincidencia) {
+  if (!coincidencia.items.length) {
     return el('p', { class: 'vacio', 'data-resultados': '1' }, 'Ninguna botella coincide con la búsqueda.');
   }
+  if (coincidencia.modo === 'fichas') {
+    return el('div', { class: 'lista-codigos', 'data-resultados': '1' }, coincidencia.items.map(({ botella, ficha }) => el('button', {
+      type: 'button',
+      class: 'fila-codigo',
+      onclick: () => ir(`#/ficha/${ficha.id}`),
+    }, [
+      el('span', { class: 'fila-codigo-cod' }, ficha.ficha_codigo),
+      el('span', { class: 'fila-codigo-nom' }, `${botella.nombre} · ${gramajeDe(ficha)} g`),
+    ])));
+  }
   const rejilla = el('div', { class: 'rejilla', 'data-resultados': '1' });
-  visibles.forEach((botella, i) => rejilla.append(tarjeta(botella, i)));
+  coincidencia.items.forEach((botella, i) => rejilla.append(tarjeta(botella, i)));
   return rejilla;
 }
 
 function actualizarListado() {
-  const visibles = botellasVisibles();
+  const coincidencia = coincidencias();
   const rec = document.querySelector('.recuento');
   const viejo = document.querySelector('[data-resultados]');
   if (!rec || !viejo) {
     pintar();
     return;
   }
-  rec.textContent = `${visibles.length} ${visibles.length === 1 ? 'botella' : 'botellas'}`;
-  viejo.replaceWith(nodoResultados(visibles));
+  rec.textContent = textoRecuento(coincidencia);
+  viejo.replaceWith(nodoResultados(coincidencia));
 }
 
 function filtros() {
@@ -716,9 +755,11 @@ function vistaFicha(id) {
   datos.append(tarjetaPatron(preparada));
   datos.append(calculadora(ficha, texto, preparada));
   const caja = el('div', { id: 'resultado-gramaje' });
-  rellenarResultado(caja, ficha, preparada);
   datos.append(caja);
+  datos.append(pesosMedidos(ficha, preparada, nuevo));
   datos.append(historialFicha());
+  datos.append(registroFicha(ficha));
+  rellenarResultado(caja, ficha, preparada);
   if (ficha.notas?.length) {
     datos.append(el('section', { class: 'notas' }, [
       el('h2', {}, 'Notas de la ficha'),
@@ -788,7 +829,7 @@ function columnaFoto(botella, ficha, preparada, nuevo) {
       }
       const z = preparada.zonas[zona];
       const medio = nuevo ? nuevo.filas[zona].medioC : z.medioC;
-      franjas.append(el('div', { class: `franja zona-${z.clave}`, style: `height:${tramo.alto}%;flex:none` }, [
+      franjas.append(el('div', { class: `franja zona-${z.clave}`, 'data-zona': z.clave, style: `height:${tramo.alto}%;flex:none` }, [
         el('span', { class: 'franja-nombre' }, z.nombre),
         el('strong', { 'data-peso': String(zona) }, `${formatoGramos(medio)} g`),
         textoGrueso(z) || null,
@@ -801,7 +842,7 @@ function columnaFoto(botella, ficha, preparada, nuevo) {
   } else {
     preparada.zonas.forEach((z, i) => {
       const medio = nuevo ? nuevo.filas[i].medioC : z.medioC;
-      franjas.append(el('div', { class: `franja zona-${z.clave}`, style: `height:${alturas[i]}%;flex:none` }, [
+      franjas.append(el('div', { class: `franja zona-${z.clave}`, 'data-zona': z.clave, style: `height:${alturas[i]}%;flex:none` }, [
         el('span', { class: 'franja-nombre' }, z.nombre),
         el('strong', { 'data-peso': String(i) }, `${formatoGramos(medio)} g`),
         textoGrueso(z) || null,
@@ -836,7 +877,30 @@ function tarjetaPatron(preparada) {
       el('p', {}, 'Valor extremo: el máximo extremo de cada zona es el máximo + 0,20 g y el mínimo extremo es el mínimo − 0,20 g.'),
       zona ? el('p', { class: 'nota-ejemplo' }, `${zona.nombre}, de ${formatoGramos(zona.minMinC)} a ${formatoGramos(zona.maxMaxC)} g.`) : null,
     ]),
+    el('button', {
+      type: 'button',
+      class: 'btn btn-ghost no-print',
+      onclick: imprimirHoja,
+    }, 'Imprimir hoja de puesto'),
   ]);
+}
+
+function imprimirHoja() {
+  const articulo = document.querySelector('article.ficha');
+  const pesos = [...(articulo?.querySelectorAll('[data-peso]') || [])];
+  const medios = [...(articulo?.querySelectorAll('.tarjeta-patron tbody tr:not(.total) [data-medio]') || [])];
+  const previos = pesos.map((n) => n.textContent);
+  pesos.forEach((n, i) => {
+    if (medios[i]) n.textContent = `${medios[i].textContent} g`;
+  });
+  document.body.classList.add('hoja-puesto');
+  const quitar = () => {
+    document.body.classList.remove('hoja-puesto');
+    pesos.forEach((n, i) => { n.textContent = previos[i]; });
+    window.removeEventListener('afterprint', quitar);
+  };
+  window.addEventListener('afterprint', quitar);
+  window.print();
 }
 
 function tablaZonas(cual, filas, pct, totales, zonasNombre) {
@@ -907,7 +971,8 @@ function rellenarResultado(caja, ficha, preparada) {
   } else if (texto.trim() && !pedido.ok && pedido.motivo !== 'vacio') {
     caja.append(el('p', { class: 'error', role: 'alert' }, 'Escribe el gramaje en gramos. Vale la coma o el punto: 40,4 o 40.4.'));
   }
-  caja.append(pesosMedidos(ficha, preparada, nuevo));
+  const previaMed = document.getElementById('peso-medido');
+  if (previaMed?.isConnected) previaMed.replaceWith(pesosMedidos(ficha, preparada, nuevo));
   const extremos = recuadroExtremos(ficha, preparada, nuevo);
   if (abierto) extremos.open = true;
   caja.append(extremos);
@@ -918,6 +983,7 @@ function rellenarResultado(caja, ficha, preparada) {
   if (campo) campo.setAttribute('aria-invalid', texto.trim() && !pedido.ok ? 'true' : 'false');
   const avisoAjuste = document.getElementById('aviso-ajuste');
   if (avisoAjuste) avisoAjuste.textContent = info.mensaje || '';
+  sincronizarZonaActiva(ficha.id);
 }
 
 function aplicarAjuste(ficha, preparada, parcial) {
@@ -938,6 +1004,8 @@ function calculadora(ficha, texto, preparada) {
   return el('form', {
     class: 'calculadora no-print',
     onsubmit: (ev) => ev.preventDefault(),
+    onfocusin: () => sincronizarZonaActiva(ficha.id),
+    onfocusout: () => setTimeout(() => sincronizarZonaActiva(ficha.id), 0),
   }, [
     el('div', { class: 'calc-par' }, [
       el('div', {}, [
@@ -1280,15 +1348,20 @@ function actualizarBarras(sec, preparada, nuevo) {
 }
 
 function pesosMedidos(ficha, preparada, nuevo) {
-  return el('section', { class: 'medidos' }, [
+  return el('section', {
+    id: 'peso-medido',
+    class: 'medidos',
+    onfocusin: () => sincronizarZonaActiva(ficha.id),
+    onfocusout: () => setTimeout(() => sincronizarZonaActiva(ficha.id), 0),
+  }, [
     el('h2', {}, 'Peso medido'),
     el('p', { class: 'hint' }, 'Opcional. Naranja si sale de mínimo y máximo. Resaltado fuerte si sale del valor extremo.'),
     ...preparada.zonas.map((z, i) => {
       const lim = nuevo ? nuevo.filas[i] : z;
       const guardado = memoria.medidos[ficha.id]?.[z.clave] || '';
       const juicio = clasificarMedida(guardado, lim.minC, lim.maxC);
-      return el('label', { class: `medido ${juicio}` }, [
-        el('span', {}, z.nombre),
+      return el('label', { class: `medido ${juicio}`, 'data-medido': z.clave }, [
+        el('span', { class: 'medido-nombre' }, z.nombre),
         el('input', {
           inputmode: 'decimal',
           value: guardado,
@@ -1303,11 +1376,147 @@ function pesosMedidos(ficha, preparada, nuevo) {
             fila.querySelector('.juicio').textContent = textoJuicio(juicioNuevo);
             document.querySelector('details.extremos')?.classList.toggle('alerta', extremosAlerta(ficha, preparada, nuevo));
           },
+          onchange: (ev) => anotarPeso(ficha, z, ev.target.value, lim),
         }),
         el('span', { class: 'juicio' }, textoJuicio(juicio)),
       ]);
     }),
   ]);
+}
+
+function sincronizarZonaActiva(fichaId) {
+  const activo = document.activeElement;
+  const medido = activo?.closest?.('[data-medido]');
+  let clave = '';
+  if (medido) clave = medido.dataset.medido || '';
+  else if (activo?.closest?.('.calculadora')) clave = document.getElementById('ajuste-zona')?.value || '';
+  else if (String(memoria.ajustes?.[fichaId]?.texto || '').trim()) clave = memoria.ajustes[fichaId].zona || '';
+  document.querySelectorAll('.franja[data-zona]').forEach((n) => {
+    n.classList.toggle('franja-activa', Boolean(clave) && n.dataset.zona === clave);
+  });
+}
+
+function fechaMadrid(fecha = new Date()) {
+  const partes = new Intl.DateTimeFormat('es-ES', {
+    timeZone: 'Europe/Madrid',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(fecha);
+  const p = Object.fromEntries(partes.filter((x) => x.type !== 'literal').map((x) => [x.type, x.value]));
+  return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}:${p.second}`;
+}
+
+function anotarPeso(ficha, zona, texto, lim) {
+  const juicio = clasificarMedida(texto, lim.minC, lim.maxC);
+  if (juicio === 'vacio') return;
+  const pedido = textoACentesimas(texto);
+  if (!pedido.ok || pedido.parcial) return;
+  const anotada = anotarMedicion(memoria, {
+    fecha: fechaMadrid(),
+    fichaId: ficha.id,
+    codigo: ficha.ficha_codigo,
+    zona: zona.nombre,
+    zonaClave: zona.clave,
+    peso: formatoGramos(pedido.centesimas),
+    juicio: textoJuicio(juicio),
+  });
+  if (anotada) refrescarRegistro();
+}
+
+function filasTurno(fichaId) {
+  const todas = memoria.turno || [];
+  const lista = fichaId ? todas.filter((f) => f.fichaId === fichaId) : todas;
+  return fichaId ? lista.slice(0, 8) : lista;
+}
+
+function filaRegistro(f) {
+  return el('div', { class: 'registro-fila' }, [
+    el('span', { class: 'registro-fecha' }, f.fecha),
+    el('strong', {}, `${f.codigo} · ${f.zona}`),
+    el('span', {}, `${f.peso} g · ${f.juicio}`),
+  ]);
+}
+
+function listaRegistro(fichaId) {
+  const filas = filasTurno(fichaId);
+  if (!filas.length) {
+    const msg = fichaId
+      ? 'Esta ficha todavía no tiene mediciones en el turno.'
+      : 'Todavía no hay mediciones en este turno.';
+    return [el('p', { class: 'hint' }, msg)];
+  }
+  return filas.map(filaRegistro);
+}
+
+function refrescarRegistro() {
+  document.querySelectorAll('[data-registro-lista]').forEach((nodo) => {
+    const filtro = nodo.dataset.registroLista || '';
+    nodo.replaceChildren(...listaRegistro(filtro));
+  });
+  const csv = csvTurno(memoria.turno || []);
+  document.querySelectorAll('[data-csv-turno]').forEach((pre) => { pre.textContent = csv; });
+}
+
+function accionesTurno() {
+  return el('div', { class: 'registro-acciones no-print' }, [
+    el('button', { type: 'button', class: 'btn btn-secondary', onclick: exportarTurno }, 'Exportar CSV'),
+    el('button', { type: 'button', class: 'btn btn-ghost', onclick: pedirBorrarTurno }, 'Borrar registro'),
+  ]);
+}
+
+function bloqueRegistro(fichaId) {
+  return [
+    accionesTurno(),
+    el('div', { 'data-registro-lista': fichaId || '', class: 'registro-lista' }, listaRegistro(fichaId)),
+    el('p', { class: 'hint no-print' }, 'El CSV usa punto y coma y coma decimal, para Excel en español.'),
+    el('pre', { class: 'csv-vista', 'data-csv-turno': '1' }, csvTurno(memoria.turno || [])),
+  ];
+}
+
+function registroFicha(ficha) {
+  return el('section', { class: 'registro-turno' }, [
+    el('h2', {}, 'Registro del turno'),
+    el('p', { class: 'hint' }, 'Mediciones de esta ficha. El CSV y el borrado son de todo el turno.'),
+    ...bloqueRegistro(ficha.id),
+    el('button', { type: 'button', class: 'btn btn-ghost no-print', onclick: () => ir('#/turno') }, 'Ver registro del turno'),
+  ]);
+}
+
+function vistaTurno() {
+  return el('section', { class: 'registro-turno turno-pagina' }, [
+    el('h1', {}, 'Registro del turno'),
+    el('p', { class: 'lead' }, 'Cada peso medido queda aquí, con la hora de Madrid.'),
+    ...bloqueRegistro(''),
+  ]);
+}
+
+function exportarTurno() {
+  descargarTexto('registro-turno.csv', `\uFEFF${csvTurno(memoria.turno || [])}`);
+}
+
+function pedirBorrarTurno() {
+  if (!(memoria.turno || []).length) return;
+  if (!window.confirm('¿Borrar todo el registro del turno?')) return;
+  borrarTurno(memoria);
+  if (ruta().vista === 'turno') pintar();
+  else refrescarRegistro();
+}
+
+function descargarTexto(nombre, texto) {
+  const puente = globalThis.SopladoraAndroid;
+  if (puente?.guardarArchivo) {
+    puente.guardarArchivo(nombre, 'text/csv', btoa(unescape(encodeURIComponent(texto))));
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([texto], { type: 'text/csv;charset=utf-8' }));
+  a.download = nombre;
+  a.click();
 }
 
 let historialTimer = 0;
@@ -1331,10 +1540,10 @@ function programarHistorial(ficha, pedido, preparada, info) {
 }
 
 function textoJuicio(juicio) {
-  if (juicio === 'fuera') return 'Fuera de mínimo y máximo';
-  if (juicio === 'extremo') return 'Fuera del valor extremo';
-  if (juicio === 'dentro') return 'Dentro del margen de trabajo';
-  return '';
+  if (juicio === 'fuera') return 'Fuera de rango';
+  if (juicio === 'extremo') return 'Fuera de extremo';
+  if (juicio === 'dentro') return 'OK';
+  return 'Sin medición';
 }
 
 function itemHistorial(h, i) {
@@ -1396,16 +1605,7 @@ function filasExportables(ficha, preparada) {
 function exportarCsv(botella, ficha, preparada) {
   const { origen, nota } = filasExportables(ficha, preparada);
   const csv = csvFicha({ titulo: `${botella.nombre} · ${ficha.ficha_codigo}`, filas: origen, nota });
-  const nombre = 'zonas-corte.csv';
-  const puente = globalThis.SopladoraAndroid;
-  if (puente?.guardarArchivo) {
-    puente.guardarArchivo(nombre, 'text/csv', btoa(unescape(encodeURIComponent(csv))));
-    return;
-  }
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  a.download = nombre;
-  a.click();
+  descargarTexto('zonas-corte.csv', csv);
 }
 
 async function compartirResultado(botella, ficha, preparada) {
