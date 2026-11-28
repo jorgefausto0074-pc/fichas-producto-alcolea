@@ -37,5 +37,8 @@ jobs:
       - name: CSV, aviso de peso y suma exacta
         run: node sopladora/tests/uso.mjs
 
+      - name: Ajuste de zona, resumen y quitar
+        run: node sopladora/tests/ajuste.mjs
+
       - name: Fichas de producto sigue pasando sus pruebas de actualización
         run: node tests/actualizar.mjs

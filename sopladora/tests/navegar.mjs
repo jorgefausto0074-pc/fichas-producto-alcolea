@@ -204,7 +204,7 @@ try {
   await shot(page, '07-medias.png');
   const mediasTxt = await page.evaluate(() => document.body.innerText);
   ok(!/diferencia/i.test(mediasTxt), 'las medias no muestran un descuadre');
-  ok(mediasTxt.includes('Medias de porcentaje'), 'pestaña de medias');
+  ok(mediasTxt.includes('Resumen medidas'), 'pestaña de resumen de medidas');
 
   const auditoria = await page.evaluate(async (clave) => {
     const { auditarDocumento } = await import('./js/auditar.js');

@@ -198,6 +198,28 @@ a { color: var(--blue); }
 .ficha-datos, .col-foto, .extremos, .calculadora, .cmp-zona, .cmp-nombre { min-width: 0; max-width: 100%; }
 .foto-marco { position: relative; background: var(--ice-soft); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
 .foto { display: block; width: 100%; height: auto; max-height: 70vh; object-fit: contain; margin: 0 auto; }
+.visor {
+  position: relative; min-width: 0; max-width: 100%;
+  background: #fff; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow);
+}
+.visor .foto-marco { border-radius: 0; box-shadow: none; margin-right: 11rem; }
+.visor-zonas {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 11rem;
+  display: flex; flex-direction: column; min-width: 0;
+}
+.franja {
+  display: flex; flex-flow: row wrap; align-items: center; align-content: center; gap: .1rem .35rem;
+  min-width: 0; min-height: 0; padding: .2rem .45rem .2rem .55rem;
+}
+.franja-nombre, .franja-grueso { font-size: .75rem; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.franja-grueso { flex-basis: 100%; font-weight: 400; }
+.franja strong { font-size: 1rem; line-height: 1.15; }
+.corte-marca {
+  position: absolute; left: 0; z-index: 2; transform: translate(-62%, -50%);
+  background: #fff; color: var(--navy); border: 1px solid var(--navy);
+  border-radius: 999px; font-size: .75rem; font-weight: 700;
+  padding: .05rem .4rem; line-height: 1.3; white-space: nowrap;
+}
 .zonas-foto { position: absolute; inset: 0; display: flex; flex-direction: column; }
 .banda {
   display: flex; align-items: center; justify-content: center; text-align: center;
@@ -235,6 +257,12 @@ a { color: var(--blue); }
   background: #fff; border-radius: var(--radius); padding: 1rem; box-shadow: var(--shadow); margin-top: .8rem;
 }
 .calculadora h2 { margin-top: 0; }
+.calc-par { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; min-width: 0; }
+.calculadora select {
+  width: 100%; min-height: 48px; border-radius: 12px; border: 1.5px solid #D3DEE8;
+  background: #fff; color: var(--navy); font-size: 1rem; padding: .4rem .7rem; margin: .2rem 0 .45rem;
+}
+.variacion { display: block; font-size: .75rem; color: var(--navy); overflow-wrap: anywhere; }
 .calc-fila input { flex: 1; }
 .aviso-habitual {
   background: #fff4e5; border: 1px solid var(--orange); color: var(--navy);
@@ -242,7 +270,8 @@ a { color: var(--blue); }
 }
 
 .cmp-zona { margin: 0 0 .8rem; }
-.cmp-nombre { display: flex; align-items: center; gap: .4rem; }
+.cmp-nombre { display: flex; align-items: center; flex-wrap: wrap; gap: .25rem .4rem; }
+.variacion { flex-basis: 100%; }
 .delta { margin-left: auto; font-weight: 800; color: var(--orange); }
 .delta.cero { color: var(--muted); }
 .cmp-linea { display: grid; grid-template-columns: 4.2rem minmax(0, 1fr) minmax(3.2rem, auto); gap: .4rem; align-items: center; margin-top: .25rem; min-width: 0; }
@@ -290,6 +319,19 @@ body.linea .tarjeta, body.linea .calculadora, body.linea .tabla-scroll { border:
 }
 .extremos .tabla-scroll { background: #fff; }
 .notas { background: #fff; border-radius: var(--radius); padding: .2rem 1rem .8rem; box-shadow: var(--shadow); }
+.resumen-scroll {
+  overflow: auto; max-width: 100%; max-height: 70vh; min-width: 0;
+  background: #fff; border-radius: 14px; box-shadow: var(--shadow);
+}
+.tabla.tabla-resumen { table-layout: auto; width: max-content; min-width: 100%; }
+.tabla-resumen thead th { position: sticky; top: 0; background: #fff; z-index: 2; white-space: nowrap; }
+.tabla-resumen td, .tabla-resumen tbody th { white-space: nowrap; }
+.th-zona { min-width: 7rem; }
+.barra-zona { display: block; height: 6px; border-radius: 99px; margin-bottom: .25rem; }
+.bloque-gas th { background: var(--navy); color: #fff; letter-spacing: .04em; }
+.bloque-gas.sin_gas th { background: var(--blue); color: #fff; }
+.media-bloque th, .media-bloque td { background: var(--ice-soft); font-weight: 800; }
+.codigo-mini { display: block; font-weight: 700; color: var(--muted); font-size: .75rem; }
 .por-zonas { margin-top: 1rem; }
 .por-zonas-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px; min-width: 0; }
 .mini-grupo { background: #fff; border-radius: 14px; padding: .6rem .8rem; box-shadow: var(--shadow); }
@@ -313,6 +355,9 @@ body.linea .tarjeta, body.linea .calculadora, body.linea .tabla-scroll { border:
 
 @media (max-width: 800px) {
   .ficha-grid { display: flex; flex-direction: column; }
+  .calc-par { grid-template-columns: minmax(0, 1fr); }
+  .visor .foto-marco { margin-right: 8.2rem; }
+  .visor-zonas { width: 8.2rem; }
   .col-foto { order: 1; }
   .ficha-grid > .calculadora { order: 2; }
   .ficha-datos { order: 3; }

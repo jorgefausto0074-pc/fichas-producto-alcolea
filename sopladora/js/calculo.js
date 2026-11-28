@@ -108,6 +108,101 @@ export function calcularNuevo(preparada, nC) {
   return { filas, pct, sumaC };
 }
 
+// Una zona queda fijada. El resto reparte N menos esa zona, en proporción a sus % originales.
+export function calcularAjustado(preparada, nC, ajuste) {
+  if (!ajuste) return { ok: true, ...calcularNuevo(preparada, nC), ajustado: false };
+  const n = preparada.zonas.length;
+  const i = ajuste.indice;
+  if (!Number.isInteger(nC) || nC <= 0) return { ok: false, motivo: 'gramaje' };
+  if (!Number.isInteger(i) || i < 0 || i >= n) return { ok: false, motivo: 'zona' };
+  const originales = preparada.pct;
+  const otros = originales.map((_, k) => k).filter((k) => k !== i);
+  const pesos = otros.map((k) => originales[k]);
+  if (!otros.length || pesos.some((p) => !Number.isInteger(p) || p <= 0)) return { ok: false, motivo: 'reparto' };
+  let medios;
+  let pcts;
+  try {
+    if (ajuste.modo === 'pct') {
+      const fijo = ajuste.valor;
+      if (!Number.isInteger(fijo) || fijo <= 0 || fijo >= 10000) return { ok: false, motivo: 'pct' };
+      const repartido = repartoMayorResto(pesos, 10000 - fijo);
+      pcts = originales.map(() => 0);
+      pcts[i] = fijo;
+      otros.forEach((k, r) => { pcts[k] = repartido[r]; });
+      medios = repartoMayorResto(pcts, nC);
+    } else if (ajuste.modo === 'gramos') {
+      const fijo = ajuste.valor;
+      if (!Number.isInteger(fijo) || fijo <= 0 || fijo >= nC) return { ok: false, motivo: 'gramos' };
+      const repartido = repartoMayorResto(pesos, nC - fijo);
+      medios = originales.map(() => 0);
+      medios[i] = fijo;
+      otros.forEach((k, r) => { medios[k] = repartido[r]; });
+      pcts = repartoMayorResto(medios, 10000);
+    } else {
+      return { ok: false, motivo: 'modo' };
+    }
+  } catch {
+    return { ok: false, motivo: 'reparto' };
+  }
+  const filas = preparada.zonas.map((z, k) => {
+    const medio = medios[k];
+    const min = medio - (z.medioC - z.minC);
+    const max = medio + (z.maxC - z.medioC);
+    return { medioC: medio, minC: min, maxC: max, minMinC: min - 20, maxMaxC: max + 20 };
+  });
+  return { ok: true, filas, pct: pcts, sumaC: medios.reduce((a, b) => a + b, 0), ajustado: true };
+}
+
+export const COLUMNAS_RESUMEN = [
+  { id: 'hombro', titulo: 'Hombro / Superior' },
+  { id: 'zona2', titulo: 'Zona 2' },
+  { id: 'zona1', titulo: 'Zona 1 etiqueta' },
+  { id: 'base', titulo: 'Fondo / Base' },
+];
+
+function pctDeColumna(porClave, id) {
+  if (id === 'hombro') {
+    if (porClave.hombro != null) return porClave.hombro;
+    if (porClave.cuerpo != null) return porClave.cuerpo;
+    return null;
+  }
+  return porClave[id] == null ? null : porClave[id];
+}
+
+export function filasResumen(doc) {
+  const definir = [
+    { gas: 'con_gas', titulo: 'Con gas' },
+    { gas: 'sin_gas', titulo: 'Sin gas' },
+  ];
+  return definir.map((bloque) => {
+    const filas = [];
+    for (const botella of doc.botellas || []) {
+      if (botella.gas !== bloque.gas) continue;
+      for (const ficha of botella.fichas || []) {
+        const preparada = prepararFicha(ficha);
+        const porClave = {};
+        preparada.zonas.forEach((z, i) => { porClave[z.clave] = preparada.pct[i]; });
+        filas.push({
+          id: ficha.id,
+          nombre: botella.nombre,
+          codigo: ficha.ficha_codigo,
+          capacidad: botella.capacidad_l,
+          gramajeC: preparada.sumaC,
+          cortes: Array.isArray(ficha.cortes_cm) ? ficha.cortes_cm : [],
+          pct: COLUMNAS_RESUMEN.map((col) => pctDeColumna(porClave, col.id)),
+        });
+      }
+    }
+    const media = COLUMNAS_RESUMEN.map((_, i) => {
+      const vals = filas.map((f) => f.pct[i]).filter((v) => v != null);
+      if (!vals.length) return null;
+      const suma = vals.reduce((a, b) => a + b, 0);
+      return { media: Math.round(suma / vals.length), n: vals.length };
+    });
+    return { gas: bloque.gas, titulo: bloque.titulo, filas, n: filas.length, media };
+  }).filter((b) => b.n > 0);
+}
+
 const ORDEN_ZONA = ['hombro', 'zona2', 'zona1', 'base', 'cuerpo'];
 
 export function fichasPlanas(doc) {

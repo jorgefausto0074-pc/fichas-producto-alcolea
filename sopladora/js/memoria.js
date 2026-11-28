@@ -9,6 +9,7 @@ const vacia = () => ({
   medidos: {},
   modoLinea: false,
   comparar: [],
+  ajustes: {},
 });
 
 export function leerMemoria() {
@@ -30,7 +31,25 @@ export function recordarGramaje(memoria, fichaId, texto) {
 }
 
 export function anotarCalculo(memoria, entrada) {
-  memoria.historial = [entrada, ...memoria.historial.filter((h) => !(h.fichaId === entrada.fichaId && h.n === entrada.n))].slice(0, 12);
+  const nota = entrada.nota || '';
+  memoria.historial = [entrada, ...memoria.historial.filter((h) => !(h.fichaId === entrada.fichaId && h.n === entrada.n && (h.nota || '') === nota))].slice(0, 12);
+  guardarMemoria(memoria);
+}
+
+export function guardarAjuste(memoria, fichaId, ajuste) {
+  memoria.ajustes = memoria.ajustes || {};
+  if (!ajuste) delete memoria.ajustes[fichaId];
+  else memoria.ajustes[fichaId] = ajuste;
+  guardarMemoria(memoria);
+}
+
+export function quitarComparada(memoria, id) {
+  memoria.comparar = (memoria.comparar || []).filter((x) => x !== id);
+  guardarMemoria(memoria);
+}
+
+export function vaciarComparacion(memoria) {
+  memoria.comparar = [];
   guardarMemoria(memoria);
 }
 
