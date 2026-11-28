@@ -1,0 +1,19 @@
+{
+  "nota": "Posición de la boca y de la base en cada foto, en % de la altura de la imagen desde arriba. No hay gramajes ni alturas de corte. altura_total_cm queda vacío: ni el PowerPoint del 26/11 ni SPEC ni la revisión Excel traen la altura total de la botella. Las diapositivas 18 y 19 solo dan la altura de cada corte y una escala de gráfica de 0 a 35 cm; la barra llega hasta el último corte, no hasta la boca. Sin altura total el visor no pone los cortes a escala.",
+  "medicion": "Silueta de la botella respecto al fondo de las esquinas de la foto publicada. Muchas fotos están recortadas y la botella ocupa casi todo el alto.",
+  "botellas": {
+    "b04": { "boca_pct": 1.0, "base_pct": 99.9, "altura_total_cm": null },
+    "b05": { "boca_pct": 0.3, "base_pct": 99.8, "altura_total_cm": null },
+    "b06": { "boca_pct": 1.8, "base_pct": 99.9, "altura_total_cm": null },
+    "b07": { "boca_pct": 0.3, "base_pct": 99.9, "altura_total_cm": null },
+    "b08": { "boca_pct": 0.3, "base_pct": 99.9, "altura_total_cm": null },
+    "b09": { "boca_pct": 2.6, "base_pct": 99.9, "altura_total_cm": null },
+    "b11": { "boca_pct": 0.8, "base_pct": 99.8, "altura_total_cm": null },
+    "b12": { "boca_pct": 2.4, "base_pct": 99.8, "altura_total_cm": null },
+    "b13": { "boca_pct": 0.2, "base_pct": 99.9, "altura_total_cm": null },
+    "b14": { "boca_pct": 0.8, "base_pct": 99.9, "altura_total_cm": null },
+    "b15": { "boca_pct": 1.1, "base_pct": 99.9, "altura_total_cm": null },
+    "b16": { "boca_pct": 1.0, "base_pct": 99.9, "altura_total_cm": null },
+    "b17": { "boca_pct": 0.5, "base_pct": 99.8, "altura_total_cm": null }
+  }
+}

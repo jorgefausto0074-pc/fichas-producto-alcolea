@@ -41,3 +41,5 @@ El gramaje patrón de cada ficha es la suma de los medios de sus zonas, para que
 La cabecera y el pie leen la edición y la fecha del paquete (`meta.edicion` y `meta.fecha_portada` en `botellas.json`) o, si no vienen, de `formato.json` (`edicion` y `fecha_portada`). `completarFormato` en `js/paquete.js` y `tools/cifrar.mjs` escriben esos campos al cifrar. No cambian los gramajes. El flujo del Excel maestro debe dejar esos dos campos en `meta`.
 
 En el dispositivo se guardan, en `localStorage` con la clave `calculadora-sopladora-memoria`, el último gramaje de cada ficha, el historial, los favoritos, los pesos medidos, el modo línea y las dos fichas de la comparación. La contraseña no va ahí.
+
+`maquetacion.json` no va cifrado y no tiene gramajes. Guarda, por botella, dónde caen la boca y la base en la foto (porcentaje de la altura de la imagen). `altura_total_cm` está vacío a propósito: el PowerPoint y el Excel de cortes no traen la altura total, solo la altura de cada corte. Cuando Jorge la dé, se rellena ese campo y el visor coloca los cortes a escala, sin volver a cifrar `datos.enc`. Mientras falte, la ficha dice «No a escala».

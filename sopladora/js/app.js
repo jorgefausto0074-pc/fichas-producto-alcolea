@@ -2,6 +2,7 @@ import { abrirPaquete, descifrarConClave, derivarClave } from './descifrar.js';
 import { borrarClave, guardarClave, leerClave } from './sesion.js';
 import { botellaVisible, textoCapacidad, textoGas } from './buscar.js';
 import { refrescarFoto } from './foto.js';
+import { tramosEscala } from './maqueta.js';
 import { anotarCalculo, borrarHistorial, guardarAjuste, guardarMemoria, leerMemoria, quitarComparada, recordarGramaje, vaciarComparacion } from './memoria.js';
 import { csvFicha } from './csv.js';
 import { contarHasta } from './animar.js';
@@ -20,6 +21,12 @@ import {
 } from './calculo.js';
 
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let plano = { botellas: {} };
+fetch('maquetacion.json').then((r) => (r.ok ? r.json() : null)).then((dato) => {
+  if (!dato?.botellas) return;
+  plano = dato;
+  if (state.doc) pintar();
+}).catch(() => {});
 const CAPACIDADES = ['0,5', '1', '1,5', '2'];
 
 const memoria = leerMemoria();
@@ -375,7 +382,10 @@ function cabecera() {
         type: 'button',
         class: r.vista === 'medias' ? 'tab activa' : 'tab',
         onclick: () => ir('#/medias'),
-      }, 'Resumen medidas'),
+      }, [
+        el('span', { class: 'tab-corto' }, 'Resumen'),
+        el('span', { class: 'tab-largo' }, 'Resumen medidas'),
+      ]),
       el('button', {
         type: 'button',
         class: r.vista === 'comparar' ? 'tab activa' : 'tab',
@@ -385,7 +395,7 @@ function cabecera() {
     el('div', { class: 'top-acciones' }, [
       el('button', {
         type: 'button',
-        class: 'btn btn-ghost',
+        class: 'btn btn-ghost solo-ancho',
         'aria-pressed': memoria.modoLinea ? 'true' : 'false',
         onclick: () => {
           memoria.modoLinea = !memoria.modoLinea;
@@ -393,9 +403,37 @@ function cabecera() {
           pintar();
         },
       }, 'Modo línea'),
-      state.instalador ? el('button', { type: 'button', class: 'btn btn-ghost', onclick: instalar }, 'Instalar') : null,
-      state.hayNueva ? el('button', { type: 'button', class: 'btn btn-ghost', onclick: activarNueva }, 'Actualizar la aplicación') : null,
-      el('button', { type: 'button', class: 'btn btn-ghost', onclick: salir }, 'Salir'),
+      state.instalador ? el('button', { type: 'button', class: 'btn btn-ghost solo-ancho', onclick: instalar }, 'Instalar') : null,
+      state.hayNueva ? el('button', { type: 'button', class: 'btn btn-ghost solo-ancho', onclick: activarNueva }, 'Actualizar la aplicación') : null,
+      el('button', { type: 'button', class: 'btn btn-ghost solo-ancho', onclick: salir }, 'Salir'),
+      el('button', {
+        type: 'button',
+        class: 'btn btn-icono solo-estrecho',
+        'aria-label': 'Más opciones',
+        'aria-expanded': 'false',
+        'aria-controls': 'menu-mas',
+        onclick: (ev) => {
+          const panel = document.getElementById('menu-mas');
+          const abierto = panel?.hidden !== false;
+          if (panel) panel.hidden = !abierto;
+          ev.currentTarget.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+        },
+      }, '⋯'),
+      el('div', { id: 'menu-mas', class: 'menu-panel', hidden: true }, [
+        el('button', {
+          type: 'button',
+          class: 'btn btn-ghost',
+          'aria-pressed': memoria.modoLinea ? 'true' : 'false',
+          onclick: () => {
+            memoria.modoLinea = !memoria.modoLinea;
+            guardarMemoria(memoria);
+            pintar();
+          },
+        }, 'Modo línea'),
+        state.instalador ? el('button', { type: 'button', class: 'btn btn-ghost', onclick: instalar }, 'Instalar') : null,
+        state.hayNueva ? el('button', { type: 'button', class: 'btn btn-ghost', onclick: activarNueva }, 'Actualizar') : null,
+        el('button', { type: 'button', class: 'btn btn-ghost', onclick: salir }, 'Salir'),
+      ]),
     ]),
   ]);
 }
@@ -623,12 +661,32 @@ function vistaFicha(id) {
   const { texto, nuevo } = resuelto;
   const sec = el('article', { class: 'ficha', 'data-ficha': ficha.id, 'data-patron': String(preparada.sumaC) }, [
     el('div', { class: 'ficha-nav no-print' }, [
-      el('button', { type: 'button', class: 'btn btn-ghost', onclick: () => ir('#/') }, 'Volver'),
-      el('button', { type: 'button', class: 'btn btn-ghost', onclick: () => alternarFavorito(ficha.id) }, memoria.favoritos.includes(ficha.id) ? '★ Favorita' : '☆ Favorita'),
-      el('button', { type: 'button', class: 'btn btn-ghost', onclick: () => alternarComparar(ficha.id) }, 'Comparar'),
-      el('button', { type: 'button', class: 'btn btn-ghost', onclick: () => compartirResultado(botella, ficha, preparada) }, 'Compartir'),
-      el('button', { type: 'button', class: 'btn btn-ghost', onclick: () => exportarCsv(botella, ficha, preparada) }, 'CSV'),
-      el('button', { type: 'button', class: 'btn btn-primary', onclick: () => window.print() }, 'Imprimir / Guardar PDF'),
+      el('button', { type: 'button', class: 'btn btn-ghost', 'aria-label': 'Volver al listado', onclick: () => ir('#/') }, [
+        el('span', { class: 'ico-nav', 'aria-hidden': 'true' }, '←'),
+        el('span', { class: 'etiq' }, 'Volver'),
+      ]),
+      el('div', { class: 'ficha-acciones' }, [
+        el('button', { type: 'button', class: 'btn btn-ghost', 'aria-label': memoria.favoritos.includes(ficha.id) ? 'Quitar de favoritos' : 'Marcar como favorita', 'aria-pressed': memoria.favoritos.includes(ficha.id) ? 'true' : 'false', onclick: () => alternarFavorito(ficha.id) }, [
+          el('span', { class: 'ico-nav', 'aria-hidden': 'true' }, memoria.favoritos.includes(ficha.id) ? '★' : '☆'),
+          el('span', { class: 'etiq' }, 'Favorita'),
+        ]),
+        el('button', { type: 'button', class: 'btn btn-ghost', 'aria-label': 'Comparar', onclick: () => alternarComparar(ficha.id) }, [
+          el('span', { class: 'ico-nav', 'aria-hidden': 'true' }, '⇄'),
+          el('span', { class: 'etiq' }, 'Comparar'),
+        ]),
+        el('button', { type: 'button', class: 'btn btn-ghost', 'aria-label': 'Compartir', onclick: () => compartirResultado(botella, ficha, preparada) }, [
+          el('span', { class: 'ico-nav', 'aria-hidden': 'true' }, '↗'),
+          el('span', { class: 'etiq' }, 'Compartir'),
+        ]),
+        el('button', { type: 'button', class: 'btn btn-ghost', 'aria-label': 'Exportar CSV', onclick: () => exportarCsv(botella, ficha, preparada) }, [
+          el('span', { class: 'ico-nav', 'aria-hidden': 'true' }, 'CSV'),
+          el('span', { class: 'etiq' }, 'CSV'),
+        ]),
+        el('button', { type: 'button', class: 'btn btn-primary', 'aria-label': 'Imprimir o guardar PDF', onclick: () => window.print() }, [
+          el('span', { class: 'ico-nav', 'aria-hidden': 'true' }, '⎙'),
+          el('span', { class: 'etiq' }, 'Imprimir'),
+        ]),
+      ]),
     ]),
     el('header', { class: 'solo-print print-cab' }, [
       logo('print-logo'),
@@ -716,27 +774,58 @@ function columnaFoto(botella, ficha, preparada, nuevo) {
   const foto = urlImagen(botella);
   const marco = el('div', { class: 'foto-marco' });
   if (foto) marco.append(el('img', { src: foto, alt: botella.nombre, class: 'foto' }));
-  const alturas = alturasVisor(botella, preparada);
+  const lay = plano.botellas?.[botella.id] || {};
+  const escala = tramosEscala({
+    cortes: ficha.cortes_cm,
+    nZonas: preparada.zonas.length,
+    alturaTotalCm: lay.altura_total_cm,
+    bocaPct: lay.boca_pct,
+    basePct: lay.base_pct,
+  });
+  const alturas = escala.aEscala ? null : alturasVisor(botella, preparada);
   const franjas = el('div', { class: 'visor-zonas' });
-  preparada.zonas.forEach((z, i) => {
-    const medio = nuevo ? nuevo.filas[i].medioC : z.medioC;
-    const grueso = textoGrueso(z);
-    franjas.append(el('div', { class: `franja zona-${z.clave}`, style: `height:${alturas[i]}%;flex:none` }, [
-      el('span', { class: 'franja-nombre' }, z.nombre),
-      el('strong', { 'data-peso': String(i) }, `${formatoGramos(medio)} g`),
-      grueso,
-    ]));
-  });
-  const cortes = [...(ficha.cortes_cm || [])].map(Number).filter((n) => Number.isFinite(n)).sort((a, b) => b - a);
-  let acum = 0;
-  cortes.forEach((corte, i) => {
-    if (i >= alturas.length - 1) return;
-    acum += alturas[i];
-    franjas.append(el('span', { class: 'corte-marca', style: `top:${acum}%` }, textoCorte(corte)));
-  });
+  if (escala.aEscala) {
+    let zona = 0;
+    escala.alturas.forEach((tramo) => {
+      if (tramo.hueco) {
+        franjas.append(el('div', { class: 'franja-hueco', style: `height:${tramo.alto}%;flex:none` }));
+        return;
+      }
+      const z = preparada.zonas[zona];
+      const medio = nuevo ? nuevo.filas[zona].medioC : z.medioC;
+      franjas.append(el('div', { class: `franja zona-${z.clave}`, style: `height:${tramo.alto}%;flex:none` }, [
+        el('span', { class: 'franja-nombre' }, z.nombre),
+        el('strong', { 'data-peso': String(zona) }, `${formatoGramos(medio)} g`),
+        textoGrueso(z) || null,
+      ]));
+      zona += 1;
+    });
+    escala.marcas.forEach((marca) => {
+      franjas.append(el('span', { class: 'corte-marca', style: `top:${marca.top}%` }, textoCorte(marca.cm)));
+    });
+  } else {
+    preparada.zonas.forEach((z, i) => {
+      const medio = nuevo ? nuevo.filas[i].medioC : z.medioC;
+      franjas.append(el('div', { class: `franja zona-${z.clave}`, style: `height:${alturas[i]}%;flex:none` }, [
+        el('span', { class: 'franja-nombre' }, z.nombre),
+        el('strong', { 'data-peso': String(i) }, `${formatoGramos(medio)} g`),
+        textoGrueso(z) || null,
+      ]));
+    });
+    const cortes = [...(ficha.cortes_cm || [])].map(Number).filter((n) => Number.isFinite(n)).sort((a, b) => b - a);
+    let acum = 0;
+    cortes.forEach((corte, i) => {
+      if (i >= alturas.length - 1) return;
+      acum += alturas[i];
+      franjas.append(el('span', { class: 'corte-marca', style: `top:${acum}%` }, textoCorte(corte)));
+    });
+  }
   const visor = el('div', { class: 'visor' }, [marco, franjas]);
   const distinto = nuevo && (nuevo.ajustado || nuevo.filas.some((f, i) => f.medioC !== preparada.zonas[i].medioC));
-  const leyenda = el('p', { class: 'leyenda-reparto', 'data-leyenda-reparto': '1' }, distinto ? 'Reparto del gramaje nuevo' : 'Reparto del gramaje patrón');
+  const leyenda = el('p', { class: 'leyenda-reparto', 'data-leyenda-reparto': '1' }, [
+    distinto ? 'Reparto del gramaje nuevo' : 'Reparto del gramaje patrón',
+    escala.aEscala ? '' : ' · No a escala',
+  ]);
   const listaCortes = el('p', { class: 'cortes' }, [
     'Alturas de corte: ',
     [...(ficha.cortes_cm || [])].map(Number).filter((n) => Number.isFinite(n)).sort((a, b) => b - a).map((c) => textoCorte(c)).join(' · ') || 'sin cortes',

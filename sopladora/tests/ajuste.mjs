@@ -1,7 +1,9 @@
 // Ajuste de una zona, resumen de medidas y quitar de la comparación.
 // La ficha de ejemplo usa los medios publicados de 1,5 L estándar. No toca datos.enc.
 
+import { readFileSync } from 'fs';
 import { calcularAjustado, filasResumen, formatoGramos, formatoPct, prepararFicha, repartoMayorResto, textoVariacion } from '../js/calculo.js';
+import { tramosEscala } from '../js/maqueta.js';
 
 const fallos = [];
 function ok(cond, msg) {
@@ -121,6 +123,23 @@ memoriaMod.guardarMemoria(memoria);
 ok(memoriaMod.leerMemoria().comparar.join(',') === 's2,s3', 'después de quitar se puede añadir otra ficha');
 memoriaMod.vaciarComparacion(memoria);
 ok(memoriaMod.leerMemoria().comparar.length === 0, 'Vaciar comparación deja la lista vacía');
+
+const plano = JSON.parse(readFileSync(new URL('../maquetacion.json', import.meta.url), 'utf8'));
+const ids = Object.keys(plano.botellas);
+ok(ids.length === 13, 'hay una ficha de maquetación por botella');
+for (const id of ids) {
+  const b = plano.botellas[id];
+  ok(b.altura_total_cm == null, `${id} no lleva una altura total inventada`);
+  const quieto = tramosEscala({
+    cortes: [11, 28], nZonas: 3, alturaTotalCm: b.altura_total_cm, bocaPct: b.boca_pct, basePct: b.base_pct,
+  });
+  ok(quieto.aEscala === false, `${id} sigue sin escala`);
+}
+const demo = tramosEscala({ cortes: [11, 28], nZonas: 3, alturaTotalCm: 32, bocaPct: 10, basePct: 90 });
+ok(demo.aEscala === true, 'con altura total el ejemplo sí va a escala');
+ok(Math.abs(demo.marcas[0].top - 20) < 1e-9, 'el corte de 28 cm cae donde toca');
+ok(Math.abs(demo.marcas[1].top - (90 - (11 / 32) * 80)) < 1e-9, 'el corte de 11 cm cae donde toca');
+ok(demo.marcas[0].cm === 28 && demo.marcas[1].cm === 11, 'las marcas conservan los cm');
 
 if (fallos.length) {
   console.error(fallos.join('\n'));

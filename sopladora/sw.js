@@ -1,4 +1,4 @@
-const SHELL = 'sopladora-shell-v8';
+const SHELL = 'sopladora-shell-v9';
 const DATOS = 'sopladora-datos-v1';
 const BASE = new URL('./', self.location);
 
@@ -16,6 +16,8 @@ const SHELL_FILES = [
   'js/descifrar.js',
   'js/sesion.js',
   'manifest.webmanifest',
+  'maquetacion.json',
+  'js/maqueta.js',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/icon-maskable-512.png',
